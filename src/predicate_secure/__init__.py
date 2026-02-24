@@ -21,13 +21,28 @@ Example:
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
+from .config import SecureAgentConfig, WrappedAgent
+from .detection import (
+    DetectionResult,
+    Framework,
+    FrameworkDetector,
+    UnsupportedFrameworkError,
+)
+
 __version__ = "0.1.0"
 
-# Public API - will be implemented in subsequent phases
+# Public API
 __all__ = [
     "SecureAgent",
     "SecureAgentConfig",
-    "PolicyLoader",
+    "WrappedAgent",
+    # Framework detection
+    "Framework",
+    "FrameworkDetector",
+    "DetectionResult",
     # Modes
     "MODE_STRICT",
     "MODE_PERMISSIVE",
@@ -37,6 +52,7 @@ __all__ = [
     "AuthorizationDenied",
     "VerificationFailed",
     "PolicyLoadError",
+    "UnsupportedFrameworkError",
 ]
 
 # Mode constants
@@ -49,30 +65,21 @@ MODE_AUDIT = "audit"
 class AuthorizationDenied(Exception):
     """Raised when an action is denied by the policy engine."""
 
-    pass
+    def __init__(self, message: str, decision: Any = None):
+        super().__init__(message)
+        self.decision = decision
 
 
 class VerificationFailed(Exception):
     """Raised when post-execution verification fails."""
 
-    pass
+    def __init__(self, message: str, predicate: str | None = None):
+        super().__init__(message)
+        self.predicate = predicate
 
 
 class PolicyLoadError(Exception):
     """Raised when a policy file cannot be loaded."""
-
-    pass
-
-
-# Placeholder classes - to be implemented
-class SecureAgentConfig:
-    """Configuration for SecureAgent."""
-
-    pass
-
-
-class PolicyLoader:
-    """Loads and validates policy files."""
 
     pass
 
@@ -94,34 +101,192 @@ class SecureAgent:
             mode="strict",
         )
         secure_agent.run()
+
+    Attributes:
+        config: SecureAgentConfig with all configuration
+        wrapped: WrappedAgent with detected framework info
+        authority_context: Initialized AuthorityClient context (lazy)
     """
 
     def __init__(
         self,
-        agent,
-        policy: str | dict | None = None,
+        agent: Any,
+        policy: str | Path | None = None,
         mode: str = MODE_STRICT,
         principal_id: str | None = None,
+        tenant_id: str | None = None,
+        session_id: str | None = None,
         sidecar_url: str | None = None,
+        signing_key: str | None = None,
+        mandate_ttl_seconds: int = 300,
     ):
         """
         Initialize SecureAgent wrapper.
 
         Args:
             agent: The agent to wrap (browser-use Agent, Playwright page, etc.)
-            policy: Policy file path, dict, or None for default
+            policy: Policy file path or None for env var fallback
             mode: Execution mode (strict, permissive, debug, audit)
             principal_id: Agent principal ID (auto-detect from env if not provided)
+            tenant_id: Tenant ID for multi-tenant deployments
+            session_id: Session ID for tracking
             sidecar_url: Sidecar URL (None for embedded mode)
+            signing_key: Secret key for mandate signing
+            mandate_ttl_seconds: TTL for issued mandates
         """
+        # Build config from kwargs
+        self._config = SecureAgentConfig.from_kwargs(
+            policy=policy,
+            mode=mode,
+            principal_id=principal_id,
+            tenant_id=tenant_id,
+            session_id=session_id,
+            sidecar_url=sidecar_url,
+            signing_key=signing_key,
+            mandate_ttl_seconds=mandate_ttl_seconds,
+        )
+
+        # Detect framework and wrap agent
+        self._wrapped = self._wrap_agent(agent)
+
+        # Lazy-initialized authority context
+        self._authority_context: Any = None
+
+        # Legacy attribute access (for backward compat with tests)
         self._agent = agent
         self._policy = policy
         self._mode = mode
         self._principal_id = principal_id
         self._sidecar_url = sidecar_url
-        # TODO: Wire up AgentRuntime, AuthorityClient, RuntimeAgent
 
-    def run(self, task: str | None = None):
+    @property
+    def config(self) -> SecureAgentConfig:
+        """Get the configuration."""
+        return self._config
+
+    @property
+    def wrapped(self) -> WrappedAgent:
+        """Get the wrapped agent with framework info."""
+        return self._wrapped
+
+    @property
+    def framework(self) -> Framework:
+        """Get the detected framework."""
+        return Framework(self._wrapped.framework)
+
+    def _wrap_agent(self, agent: Any) -> WrappedAgent:
+        """
+        Detect framework and wrap agent.
+
+        Args:
+            agent: The agent to wrap
+
+        Returns:
+            WrappedAgent with framework info
+        """
+        detection = FrameworkDetector.detect(agent)
+
+        return WrappedAgent(
+            original=agent,
+            framework=detection.framework.value,
+            agent_runtime=None,  # Initialized lazily when needed
+            executor=self._extract_executor(agent, detection),
+            metadata=detection.metadata,
+        )
+
+    def _extract_executor(self, agent: Any, detection: DetectionResult) -> Any | None:
+        """
+        Extract LLM executor from agent if available.
+
+        Args:
+            agent: The agent object
+            detection: Detection result
+
+        Returns:
+            LLM executor or None
+        """
+        # browser-use Agent has .llm attribute
+        if detection.framework == Framework.BROWSER_USE:
+            return getattr(agent, "llm", None)
+
+        # LangChain AgentExecutor has .agent or .llm
+        if detection.framework == Framework.LANGCHAIN:
+            return getattr(agent, "llm", None) or getattr(agent, "agent", None)
+
+        # PydanticAI agents have .model
+        if detection.framework == Framework.PYDANTIC_AI:
+            return getattr(agent, "model", None)
+
+        return None
+
+    def _get_authority_context(self) -> Any:
+        """
+        Get or initialize the authority context.
+
+        Returns:
+            LocalAuthorizationContext from AuthorityClient
+
+        Raises:
+            PolicyLoadError: If policy cannot be loaded
+        """
+        if self._authority_context is not None:
+            return self._authority_context
+
+        policy_path = self._config.effective_policy_path
+        if policy_path is None:
+            # No policy = no authorization enforcement
+            return None
+
+        try:
+            # Import here to avoid hard dependency
+            from predicate_authority.client import AuthorityClient
+
+            self._authority_context = AuthorityClient.from_policy_file(
+                policy_file=policy_path,
+                secret_key=self._config.effective_signing_key,
+                ttl_seconds=self._config.mandate_ttl_seconds,
+            )
+            return self._authority_context
+        except ImportError:
+            raise PolicyLoadError(
+                "predicate-authority is required for policy enforcement. "
+                "Install with: pip install predicate-secure[authority]"
+            )
+        except FileNotFoundError as e:
+            raise PolicyLoadError(f"Policy file not found: {policy_path}") from e
+        except Exception as e:
+            raise PolicyLoadError(f"Failed to load policy: {e}") from e
+
+    def _create_pre_action_authorizer(self) -> Any:
+        """
+        Create a pre-action authorizer callback for RuntimeAgent.
+
+        Returns:
+            Callable that takes ActionRequest and returns decision
+        """
+        context = self._get_authority_context()
+        if context is None:
+            # No policy = allow all
+            return None
+
+        def authorizer(request: Any) -> Any:
+            """Pre-action authorization callback."""
+            decision = context.client.authorize(request)
+
+            if self._config.mode == "debug":
+                print(f"[predicate-secure] authorize({request.action}): {decision}")
+
+            if not decision.allowed and self._config.fail_closed:
+                raise AuthorizationDenied(
+                    f"Action denied: {decision.reason.value if decision.reason else 'policy'}",
+                    decision=decision,
+                )
+
+            return decision
+
+        return authorizer
+
+    def run(self, task: str | None = None) -> Any:
         """
         Execute the agent with full authorization + verification loop.
 
@@ -130,12 +295,91 @@ class SecureAgent:
 
         Returns:
             Agent execution result
+
+        Raises:
+            AuthorizationDenied: If an action is denied (in strict mode)
+            VerificationFailed: If post-execution verification fails
+            UnsupportedFrameworkError: If framework is not supported
         """
-        # TODO: Implement the full loop
-        raise NotImplementedError("SecureAgent.run() not yet implemented")
+        if self._wrapped.framework == Framework.UNKNOWN.value:
+            detection = FrameworkDetector.detect(self._wrapped.original)
+            raise UnsupportedFrameworkError(detection)
+
+        # Framework-specific execution
+        if self._wrapped.framework == Framework.BROWSER_USE.value:
+            return self._run_browser_use(task)
+
+        if self._wrapped.framework == Framework.PLAYWRIGHT.value:
+            return self._run_playwright(task)
+
+        if self._wrapped.framework == Framework.LANGCHAIN.value:
+            return self._run_langchain(task)
+
+        if self._wrapped.framework == Framework.PYDANTIC_AI.value:
+            return self._run_pydantic_ai(task)
+
+        raise NotImplementedError(
+            f"run() not implemented for framework: {self._wrapped.framework}"
+        )
+
+    def _run_browser_use(self, task: str | None) -> Any:
+        """Run browser-use agent with authorization."""
+        # Import here to avoid hard dependency
+        try:
+            import asyncio
+
+            agent = self._wrapped.original
+
+            # Override task if provided
+            if task is not None:
+                agent.task = task
+
+            # Check if agent has a run method
+            if hasattr(agent, "run"):
+                # browser-use Agent.run() is typically async
+                if asyncio.iscoroutinefunction(agent.run):
+                    return asyncio.get_event_loop().run_until_complete(agent.run())
+                return agent.run()
+
+            raise NotImplementedError(
+                "browser-use Agent.run() integration not fully implemented. "
+                "For now, use the agent directly with pre_action_authorizer callback."
+            )
+        except ImportError:
+            raise NotImplementedError(
+                "browser-use integration requires the browser-use package. "
+                "Install with: pip install predicate-secure[browser-use]"
+            )
+
+    def _run_playwright(self, task: str | None) -> Any:
+        """Run Playwright page with authorization."""
+        raise NotImplementedError(
+            "Playwright direct integration not yet implemented. "
+            "Use with RuntimeAgent for Playwright pages."
+        )
+
+    def _run_langchain(self, task: str | None) -> Any:
+        """Run LangChain agent with authorization."""
+        agent = self._wrapped.original
+
+        # LangChain agents have .invoke() method
+        if hasattr(agent, "invoke"):
+            if task is not None:
+                return agent.invoke({"input": task})
+            raise ValueError("Task is required for LangChain agents")
+
+        raise NotImplementedError(
+            "LangChain integration requires AgentExecutor with invoke() method."
+        )
+
+    def _run_pydantic_ai(self, task: str | None) -> Any:
+        """Run PydanticAI agent with authorization."""
+        raise NotImplementedError(
+            "PydanticAI integration not yet implemented."
+        )
 
     @classmethod
-    def attach(cls, agent, **kwargs) -> "SecureAgent":
+    def attach(cls, agent: Any, **kwargs: Any) -> SecureAgent:
         """
         Attach SecureAgent to an existing agent (factory method).
 
@@ -149,3 +393,32 @@ class SecureAgent:
             SecureAgent instance
         """
         return cls(agent=agent, **kwargs)
+
+    def get_pre_action_authorizer(self) -> Any:
+        """
+        Get a pre-action authorizer callback for use with RuntimeAgent.
+
+        This allows integrating SecureAgent authorization with existing
+        RuntimeAgent-based workflows.
+
+        Returns:
+            Callable for pre_action_authorizer parameter
+
+        Example:
+            secure = SecureAgent(agent=my_agent, policy="policy.yaml")
+            runtime_agent = RuntimeAgent(
+                runtime=runtime,
+                executor=executor,
+                pre_action_authorizer=secure.get_pre_action_authorizer(),
+            )
+        """
+        return self._create_pre_action_authorizer()
+
+    def __repr__(self) -> str:
+        return (
+            f"SecureAgent("
+            f"framework={self._wrapped.framework}, "
+            f"mode={self._config.mode}, "
+            f"policy={self._config.effective_policy_path or 'None'}"
+            f")"
+        )
