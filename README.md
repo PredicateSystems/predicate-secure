@@ -80,21 +80,112 @@ SecureAgent
     └── RuntimeAgent (orchestration, pre-action hook)
 ```
 
-## Policy Example
+## Debug Mode
+
+Debug mode provides human-readable trace output for troubleshooting:
+
+```python
+secure_agent = SecureAgent(
+    agent=agent,
+    policy="policy.yaml",
+    mode="debug",
+    trace_format="console",  # or "json"
+    trace_file="trace.jsonl",  # optional file output
+)
+```
+
+Console output shows:
+- Session start/end with framework and policy info
+- Each step with action and resource
+- Policy decisions (ALLOWED/DENIED) with reason codes
+- Snapshot diffs (before/after state changes)
+- Verification results (PASS/FAIL)
+
+For JSON trace output (machine-parseable):
+
+```python
+secure_agent = SecureAgent(
+    agent=agent,
+    mode="debug",
+    trace_format="json",
+    trace_file="trace.jsonl",
+)
+```
+
+## Policy Reference
+
+### Basic Structure
+
+```yaml
+# policies/example.yaml
+rules:
+  - action: "<action_pattern>"
+    resource: "<resource_pattern>"
+    effect: allow | deny
+    require_verification:  # optional
+      - <predicate>
+```
+
+### Action Patterns
+
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| `browser.*` | All browser actions | click, type, navigate |
+| `browser.click` | Specific action | Only click events |
+| `api.call` | API tool calls | HTTP requests |
+| `*` | Wildcard (all actions) | Catch-all rules |
+
+### Resource Patterns
+
+| Pattern | Description | Example |
+|---------|-------------|---------|
+| `https://example.com/*` | URL prefix match | All pages on domain |
+| `*checkout*` | Contains match | Any checkout-related URL |
+| `button#submit` | CSS selector | Specific element |
+| `*` | Wildcard (all resources) | Catch-all |
+
+### Verification Predicates
+
+```yaml
+require_verification:
+  # URL checks
+  - url_contains: "/checkout"
+  - url_matches: "^https://.*\\.amazon\\.com/.*"
+
+  # DOM state checks
+  - element_exists: "#cart-items"
+  - element_text_contains:
+      selector: ".total"
+      text: "$"
+
+  # Custom predicates
+  - predicate: "cart_not_empty"
+```
+
+### Policy Example
 
 ```yaml
 # policies/shopping.yaml
 rules:
+  # Allow browsing Amazon
   - action: "browser.*"
     resource: "https://amazon.com/*"
     effect: allow
 
+  # Allow checkout with verification
   - action: "browser.click"
     resource: "*checkout*"
     effect: allow
     require_verification:
       - url_contains: "/checkout"
+      - element_exists: "#cart-items"
 
+  # Block external links
+  - action: "browser.navigate"
+    resource: "https://external.com/*"
+    effect: deny
+
+  # Default deny
   - action: "*"
     resource: "*"
     effect: deny
