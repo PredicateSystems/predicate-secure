@@ -80,6 +80,86 @@ SecureAgent
     └── RuntimeAgent (orchestration, pre-action hook)
 ```
 
+## Sidecar Prerequisite (Optional)
+
+The [Predicate Authority Sidecar](https://github.com/PredicateSystems/predicate-authority-sidecar) is **only required if you need pre-action authorization**—real-time policy evaluation that blocks unauthorized actions before they execute.
+
+| Feature | Sidecar Required? |
+|---------|-------------------|
+| Pre-action authorization (`strict`/`permissive` modes) | **Yes** |
+| Debug tracing (`debug` mode) | No |
+| Audit logging (`audit` mode) | No |
+| Policy development & testing | No |
+
+If you only need debug tracing or audit logging, you can skip the sidecar entirely.
+
+### Starting the Sidecar
+
+**Docker (Recommended):**
+
+```bash
+docker run -d -p 8787:8787 ghcr.io/predicatesystems/predicate-authorityd:latest
+```
+
+**Or download binary:**
+
+```bash
+# macOS (Apple Silicon)
+curl -fsSL https://github.com/PredicateSystems/predicate-authority-sidecar/releases/latest/download/predicate-authorityd-darwin-arm64.tar.gz | tar -xz
+./predicate-authorityd --port 8787
+
+# Linux x64
+curl -fsSL https://github.com/PredicateSystems/predicate-authority-sidecar/releases/latest/download/predicate-authorityd-linux-x64.tar.gz | tar -xz
+./predicate-authorityd --port 8787
+```
+
+**Verify:**
+
+```bash
+curl http://localhost:8787/health
+# {"status":"ok"}
+```
+
+The sidecar handles policy evaluation in <25ms with zero egress—no data leaves your infrastructure.
+
+## Flexible Verification
+
+Use pre-execution authorization and post-execution verification **independently or together**:
+
+| Pattern | Use Case | Sidecar? |
+|---------|----------|----------|
+| Pre-execution only | Block unauthorized actions | Yes |
+| Post-execution only | Verify outcomes after completion | No |
+| Both (full loop) | Block + verify for max safety | Yes |
+
+**Pre-execution only** (policy without `require_verification`):
+
+```yaml
+rules:
+  - action: "browser.*"
+    resource: "https://amazon.com/*"
+    effect: allow
+```
+
+**Post-execution only** (debug mode, no sidecar):
+
+```python
+secure_agent = SecureAgent(agent=agent, mode="debug")
+secure_agent.run()
+secure_agent.trace_verification("cart_not_empty", passed=True)
+```
+
+**Both** (policy with `require_verification`):
+
+```yaml
+rules:
+  - action: "browser.click"
+    resource: "*checkout*"
+    effect: allow
+    require_verification:
+      - element_exists: "#order-confirmation"
+```
+
 ## Debug Mode
 
 Debug mode provides human-readable trace output for troubleshooting:

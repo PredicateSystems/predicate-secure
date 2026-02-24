@@ -31,6 +31,141 @@ A comprehensive guide to securing your AI agents with predicate-secure.
 - **Cryptographic audit** - All decisions are logged with tamper-proof receipts
 - **Zero refactoring** - Works with your existing agent code
 
+### Sidecar Prerequisite (Optional)
+
+The [Predicate Authority Sidecar](https://github.com/PredicateSystems/predicate-authority-sidecar) is **only required if you need pre-action authorization**—real-time policy evaluation that blocks unauthorized actions before they execute.
+
+| Feature | Sidecar Required? |
+|---------|-------------------|
+| Pre-action authorization (`strict`/`permissive` modes) | **Yes** |
+| Debug tracing (`debug` mode) | No |
+| Audit logging (`audit` mode) | No |
+| Policy development & testing | No |
+
+**If you only need debug tracing, audit logging, or policy development, you can skip the sidecar entirely.**
+
+#### Starting the Sidecar
+
+| Resource | Link |
+|----------|------|
+| Sidecar Repository | [predicate-authority-sidecar](https://github.com/PredicateSystems/predicate-authority-sidecar) |
+| Download Binaries | [Latest Releases](https://github.com/PredicateSystems/predicate-authority-sidecar/releases) |
+
+**Option A: Docker (Recommended)**
+
+```bash
+docker run -d -p 8787:8787 ghcr.io/predicatesystems/predicate-authorityd:latest
+```
+
+**Option B: Download Binary**
+
+```bash
+# macOS (Apple Silicon)
+curl -fsSL https://github.com/PredicateSystems/predicate-authority-sidecar/releases/latest/download/predicate-authorityd-darwin-arm64.tar.gz | tar -xz
+chmod +x predicate-authorityd
+./predicate-authorityd --port 8787
+
+# Linux x64
+curl -fsSL https://github.com/PredicateSystems/predicate-authority-sidecar/releases/latest/download/predicate-authorityd-linux-x64.tar.gz | tar -xz
+chmod +x predicate-authorityd
+./predicate-authorityd --port 8787
+```
+
+See [all platform binaries](https://github.com/PredicateSystems/predicate-authority-sidecar/releases) for Linux ARM64, macOS Intel, and Windows.
+
+**Verify it's running:**
+
+```bash
+curl http://localhost:8787/health
+# {"status":"ok"}
+```
+
+The sidecar handles policy evaluation in <25ms with zero egress—no data leaves your infrastructure.
+
+### Flexible Verification Options
+
+You can use pre-execution authorization and post-execution verification **independently or together**:
+
+| Usage Pattern | Description | Sidecar Required? |
+|---------------|-------------|-------------------|
+| Pre-execution only | Block unauthorized actions before they run | Yes |
+| Post-execution only | Verify outcomes after actions complete | No |
+| Both (full loop) | Block + verify for maximum safety | Yes |
+
+#### Pre-Execution Authorization Only
+
+Use `strict` or `permissive` mode with a policy that has no `require_verification` predicates:
+
+```python
+secure_agent = SecureAgent(
+    agent=agent,
+    policy="policy.yaml",
+    mode="strict",  # Requires sidecar
+)
+```
+
+```yaml
+# policy.yaml - authorization only, no verification
+rules:
+  - action: "browser.*"
+    resource: "https://amazon.com/*"
+    effect: allow
+
+  - action: "*"
+    resource: "*"
+    effect: deny
+```
+
+#### Post-Execution Verification Only
+
+Use `debug` or `audit` mode and manually verify outcomes—no sidecar needed:
+
+```python
+secure_agent = SecureAgent(
+    agent=agent,
+    mode="debug",  # No sidecar required
+)
+
+# Run agent
+result = secure_agent.run()
+
+# Verify outcomes after execution
+secure_agent.trace_verification(
+    predicate="cart_not_empty",
+    passed=check_cart_has_items(),
+    message="Verified cart contains expected items",
+)
+
+secure_agent.trace_verification(
+    predicate="order_confirmed",
+    passed=check_order_confirmation(),
+    message="Order confirmation page displayed",
+)
+```
+
+#### Both: Full Closed-Loop Verification
+
+Use `strict` mode with `require_verification` predicates for maximum safety:
+
+```python
+secure_agent = SecureAgent(
+    agent=agent,
+    policy="policy.yaml",
+    mode="strict",  # Requires sidecar
+)
+```
+
+```yaml
+# policy.yaml - authorization + verification
+rules:
+  - action: "browser.click"
+    resource: "*checkout*"
+    effect: allow
+    require_verification:  # Post-execution check
+      - url_contains: "/order-confirmation"
+      - element_exists: "#order-number"
+```
+
 ### How it works
 
 ```
