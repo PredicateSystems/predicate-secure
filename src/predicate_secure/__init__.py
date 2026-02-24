@@ -24,13 +24,18 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from .config import SecureAgentConfig, WrappedAgent
-from .detection import (
-    DetectionResult,
-    Framework,
-    FrameworkDetector,
-    UnsupportedFrameworkError,
+from .adapters import (
+    AdapterError,
+    AdapterResult,
+    create_adapter,
+    create_browser_use_adapter,
+    create_browser_use_runtime,
+    create_langchain_adapter,
+    create_playwright_adapter,
+    create_pydantic_ai_adapter,
 )
+from .config import SecureAgentConfig, WrappedAgent
+from .detection import DetectionResult, Framework, FrameworkDetector, UnsupportedFrameworkError
 
 __version__ = "0.1.0"
 
@@ -43,6 +48,15 @@ __all__ = [
     "Framework",
     "FrameworkDetector",
     "DetectionResult",
+    # Adapters
+    "AdapterResult",
+    "AdapterError",
+    "create_adapter",
+    "create_browser_use_adapter",
+    "create_browser_use_runtime",
+    "create_playwright_adapter",
+    "create_langchain_adapter",
+    "create_pydantic_ai_adapter",
     # Modes
     "MODE_STRICT",
     "MODE_PERMISSIVE",
@@ -318,9 +332,7 @@ class SecureAgent:
         if self._wrapped.framework == Framework.PYDANTIC_AI.value:
             return self._run_pydantic_ai(task)
 
-        raise NotImplementedError(
-            f"run() not implemented for framework: {self._wrapped.framework}"
-        )
+        raise NotImplementedError(f"run() not implemented for framework: {self._wrapped.framework}")
 
     def _run_browser_use(self, task: str | None) -> Any:
         """Run browser-use agent with authorization."""
@@ -331,8 +343,8 @@ class SecureAgent:
             agent = self._wrapped.original
 
             # Override task if provided
-            if task is not None:
-                agent.task = task
+            if task is not None and hasattr(agent, "task"):
+                setattr(agent, "task", task)
 
             # Check if agent has a run method
             if hasattr(agent, "run"):
@@ -374,9 +386,7 @@ class SecureAgent:
 
     def _run_pydantic_ai(self, task: str | None) -> Any:
         """Run PydanticAI agent with authorization."""
-        raise NotImplementedError(
-            "PydanticAI integration not yet implemented."
-        )
+        raise NotImplementedError("PydanticAI integration not yet implemented.")
 
     @classmethod
     def attach(cls, agent: Any, **kwargs: Any) -> SecureAgent:
@@ -413,6 +423,195 @@ class SecureAgent:
             )
         """
         return self._create_pre_action_authorizer()
+
+    def get_adapter(
+        self,
+        tracer: Any | None = None,
+        snapshot_options: Any | None = None,
+        predicate_api_key: str | None = None,
+        **kwargs: Any,
+    ) -> AdapterResult:
+        """
+        Get an adapter for the wrapped agent.
+
+        This creates the appropriate adapter based on the detected framework,
+        wiring together BrowserUseAdapter, PredicateBrowserUsePlugin,
+        SentienceLangChainCore, or AgentRuntime.from_playwright_page().
+
+        Args:
+            tracer: Optional Tracer for event emission
+            snapshot_options: Optional SnapshotOptions
+            predicate_api_key: Optional API key for Predicate API
+            **kwargs: Additional framework-specific options
+
+        Returns:
+            AdapterResult with initialized components
+
+        Raises:
+            AdapterError: If adapter initialization fails
+
+        Example:
+            secure = SecureAgent(agent=my_browser_use_agent, policy="policy.yaml")
+            adapter = secure.get_adapter()
+
+            # Use plugin lifecycle hooks
+            result = await agent.run(
+                on_step_start=adapter.plugin.on_step_start,
+                on_step_end=adapter.plugin.on_step_end,
+            )
+        """
+        return create_adapter(
+            agent=self._wrapped.original,
+            framework=self.framework,
+            tracer=tracer,
+            snapshot_options=snapshot_options,
+            predicate_api_key=predicate_api_key,
+            **kwargs,
+        )
+
+    async def get_runtime_async(
+        self,
+        tracer: Any | None = None,
+        snapshot_options: Any | None = None,
+        predicate_api_key: str | None = None,
+    ) -> Any:
+        """
+        Get an initialized AgentRuntime for the wrapped agent (async).
+
+        This is useful for browser-use agents where runtime initialization
+        requires async operations.
+
+        Args:
+            tracer: Optional Tracer for event emission
+            snapshot_options: Optional SnapshotOptions
+            predicate_api_key: Optional API key for Predicate API
+
+        Returns:
+            AgentRuntime instance
+
+        Raises:
+            AdapterError: If runtime initialization fails
+
+        Example:
+            secure = SecureAgent(agent=my_browser_use_agent, policy="policy.yaml")
+            runtime = await secure.get_runtime_async()
+
+            # Use with RuntimeAgent
+            from predicate.runtime_agent import RuntimeAgent
+            runtime_agent = RuntimeAgent(
+                runtime=runtime,
+                executor=my_llm,
+                pre_action_authorizer=secure.get_pre_action_authorizer(),
+            )
+        """
+        if self.framework == Framework.BROWSER_USE:
+            result = await create_browser_use_runtime(
+                agent=self._wrapped.original,
+                tracer=tracer,
+                snapshot_options=snapshot_options,
+                predicate_api_key=predicate_api_key,
+            )
+            # Cache the runtime
+            self._wrapped.agent_runtime = result.agent_runtime
+            return result.agent_runtime
+
+        if self.framework == Framework.PLAYWRIGHT:
+            adapter = create_playwright_adapter(
+                page=self._wrapped.original,
+                tracer=tracer,
+                snapshot_options=snapshot_options,
+                predicate_api_key=predicate_api_key,
+            )
+            self._wrapped.agent_runtime = adapter.agent_runtime
+            return adapter.agent_runtime
+
+        raise AdapterError(
+            f"get_runtime_async() not supported for framework: {self.framework.value}",
+            self.framework,
+        )
+
+    def get_browser_use_plugin(
+        self,
+        tracer: Any | None = None,
+        snapshot_options: Any | None = None,
+        predicate_api_key: str | None = None,
+    ) -> Any:
+        """
+        Get a PredicateBrowserUsePlugin for browser-use lifecycle hooks.
+
+        This is the recommended way to integrate with browser-use agents.
+
+        Args:
+            tracer: Optional Tracer for event emission
+            snapshot_options: Optional SnapshotOptions
+            predicate_api_key: Optional API key for Predicate API
+
+        Returns:
+            PredicateBrowserUsePlugin instance
+
+        Raises:
+            AdapterError: If framework is not browser-use
+
+        Example:
+            secure = SecureAgent(agent=my_agent, policy="policy.yaml")
+            plugin = secure.get_browser_use_plugin()
+
+            # Run with lifecycle hooks
+            result = await agent.run(
+                on_step_start=plugin.on_step_start,
+                on_step_end=plugin.on_step_end,
+            )
+        """
+        if self.framework != Framework.BROWSER_USE:
+            raise AdapterError(
+                "get_browser_use_plugin() only available for browser-use agents",
+                self.framework,
+            )
+
+        adapter = create_browser_use_adapter(
+            agent=self._wrapped.original,
+            tracer=tracer,
+            snapshot_options=snapshot_options,
+            predicate_api_key=predicate_api_key,
+        )
+        return adapter.plugin
+
+    def get_langchain_core(
+        self,
+        browser: Any | None = None,
+        tracer: Any | None = None,
+        snapshot_options: Any | None = None,
+        predicate_api_key: str | None = None,
+    ) -> Any:
+        """
+        Get a SentienceLangChainCore for LangChain tool interception.
+
+        Args:
+            browser: Optional browser instance for browser tools
+            tracer: Optional Tracer for event emission
+            snapshot_options: Optional SnapshotOptions
+            predicate_api_key: Optional API key for Predicate API
+
+        Returns:
+            SentienceLangChainCore instance
+
+        Raises:
+            AdapterError: If framework is not LangChain
+        """
+        if self.framework != Framework.LANGCHAIN:
+            raise AdapterError(
+                "get_langchain_core() only available for LangChain agents",
+                self.framework,
+            )
+
+        adapter = create_langchain_adapter(
+            agent=self._wrapped.original,
+            browser=browser,
+            tracer=tracer,
+            snapshot_options=snapshot_options,
+            predicate_api_key=predicate_api_key,
+        )
+        return adapter.plugin
 
     def __repr__(self) -> str:
         return (
