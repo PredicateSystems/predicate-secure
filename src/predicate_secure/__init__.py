@@ -36,6 +36,15 @@ from .adapters import (
 )
 from .config import SecureAgentConfig, WrappedAgent
 from .detection import DetectionResult, Framework, FrameworkDetector, UnsupportedFrameworkError
+from .tracing import (
+    DebugTracer,
+    PolicyDecision,
+    SnapshotDiff,
+    TraceEvent,
+    TraceFormat,
+    VerificationResult,
+    create_debug_tracer,
+)
 
 __version__ = "0.1.0"
 
@@ -57,6 +66,14 @@ __all__ = [
     "create_playwright_adapter",
     "create_langchain_adapter",
     "create_pydantic_ai_adapter",
+    # Tracing
+    "DebugTracer",
+    "TraceEvent",
+    "TraceFormat",
+    "PolicyDecision",
+    "SnapshotDiff",
+    "VerificationResult",
+    "create_debug_tracer",
     # Modes
     "MODE_STRICT",
     "MODE_PERMISSIVE",
@@ -133,6 +150,10 @@ class SecureAgent:
         sidecar_url: str | None = None,
         signing_key: str | None = None,
         mandate_ttl_seconds: int = 300,
+        trace_format: str = "console",
+        trace_file: str | Path | None = None,
+        trace_colors: bool = True,
+        trace_verbose: bool = True,
     ):
         """
         Initialize SecureAgent wrapper.
@@ -147,6 +168,10 @@ class SecureAgent:
             sidecar_url: Sidecar URL (None for embedded mode)
             signing_key: Secret key for mandate signing
             mandate_ttl_seconds: TTL for issued mandates
+            trace_format: Format for debug trace output ("console" or "json")
+            trace_file: Path to trace output file (None for stderr)
+            trace_colors: Whether to use ANSI colors in console output
+            trace_verbose: Whether to output verbose trace information
         """
         # Build config from kwargs
         self._config = SecureAgentConfig.from_kwargs(
@@ -158,6 +183,10 @@ class SecureAgent:
             sidecar_url=sidecar_url,
             signing_key=signing_key,
             mandate_ttl_seconds=mandate_ttl_seconds,
+            trace_format=trace_format,
+            trace_file=trace_file,
+            trace_colors=trace_colors,
+            trace_verbose=trace_verbose,
         )
 
         # Detect framework and wrap agent
@@ -165,6 +194,16 @@ class SecureAgent:
 
         # Lazy-initialized authority context
         self._authority_context: Any = None
+
+        # Debug tracer (initialized when mode="debug")
+        self._tracer: DebugTracer | None = None
+        if self._config.is_debug_mode:
+            self._tracer = create_debug_tracer(
+                format=self._config.trace_format,
+                file_path=self._config.effective_trace_file,
+                use_colors=self._config.trace_colors,
+                verbose=self._config.trace_verbose,
+            )
 
         # Legacy attribute access (for backward compat with tests)
         self._agent = agent
@@ -187,6 +226,11 @@ class SecureAgent:
     def framework(self) -> Framework:
         """Get the detected framework."""
         return Framework(self._wrapped.framework)
+
+    @property
+    def tracer(self) -> DebugTracer | None:
+        """Get the debug tracer (available when mode='debug')."""
+        return self._tracer
 
     def _wrap_agent(self, agent: Any) -> WrappedAgent:
         """
@@ -285,10 +329,38 @@ class SecureAgent:
 
         def authorizer(request: Any) -> Any:
             """Pre-action authorization callback."""
+            # Trace authorization request
+            if self._tracer:
+                action = getattr(request, "action", str(request))
+                resource = getattr(request, "resource", "")
+                self._tracer.trace_authorization_request(
+                    action=action,
+                    resource=resource,
+                    principal=self._config.effective_principal_id,
+                )
+
             decision = context.client.authorize(request)
 
-            if self._config.mode == "debug":
-                print(f"[predicate-secure] authorize({request.action}): {decision}")
+            # Trace policy decision
+            if self._tracer:
+                action = getattr(request, "action", str(request))
+                resource = getattr(request, "resource", "")
+                reason = None
+                if hasattr(decision, "reason") and decision.reason:
+                    reason = (
+                        decision.reason.value
+                        if hasattr(decision.reason, "value")
+                        else str(decision.reason)
+                    )
+                self._tracer.trace_policy_decision(
+                    PolicyDecision(
+                        action=action,
+                        resource=resource,
+                        allowed=decision.allowed,
+                        reason=reason,
+                        principal=self._config.effective_principal_id,
+                    )
+                )
 
             if not decision.allowed and self._config.fail_closed:
                 raise AuthorizationDenied(
@@ -319,20 +391,41 @@ class SecureAgent:
             detection = FrameworkDetector.detect(self._wrapped.original)
             raise UnsupportedFrameworkError(detection)
 
-        # Framework-specific execution
-        if self._wrapped.framework == Framework.BROWSER_USE.value:
-            return self._run_browser_use(task)
+        # Trace session start
+        if self._tracer:
+            self._tracer.trace_session_start(
+                framework=self._wrapped.framework,
+                mode=self._config.mode,
+                policy=self._config.effective_policy_path,
+                principal_id=self._config.effective_principal_id,
+            )
 
-        if self._wrapped.framework == Framework.PLAYWRIGHT.value:
-            return self._run_playwright(task)
+        try:
+            # Framework-specific execution
+            if self._wrapped.framework == Framework.BROWSER_USE.value:
+                result = self._run_browser_use(task)
+            elif self._wrapped.framework == Framework.PLAYWRIGHT.value:
+                result = self._run_playwright(task)
+            elif self._wrapped.framework == Framework.LANGCHAIN.value:
+                result = self._run_langchain(task)
+            elif self._wrapped.framework == Framework.PYDANTIC_AI.value:
+                result = self._run_pydantic_ai(task)
+            else:
+                raise NotImplementedError(
+                    f"run() not implemented for framework: {self._wrapped.framework}"
+                )
 
-        if self._wrapped.framework == Framework.LANGCHAIN.value:
-            return self._run_langchain(task)
+            # Trace session end (success)
+            if self._tracer:
+                self._tracer.trace_session_end(success=True)
 
-        if self._wrapped.framework == Framework.PYDANTIC_AI.value:
-            return self._run_pydantic_ai(task)
+            return result
 
-        raise NotImplementedError(f"run() not implemented for framework: {self._wrapped.framework}")
+        except Exception as e:
+            # Trace session end (failure)
+            if self._tracer:
+                self._tracer.trace_session_end(success=False, error=str(e))
+            raise
 
     def _run_browser_use(self, task: str | None) -> Any:
         """Run browser-use agent with authorization."""
@@ -387,6 +480,123 @@ class SecureAgent:
     def _run_pydantic_ai(self, task: str | None) -> Any:
         """Run PydanticAI agent with authorization."""
         raise NotImplementedError("PydanticAI integration not yet implemented.")
+
+    def trace_step(
+        self,
+        action: str,
+        resource: str = "",
+        metadata: dict | None = None,
+    ) -> int | None:
+        """
+        Trace a step start (for manual step tracking).
+
+        Args:
+            action: Action being performed
+            resource: Resource being acted upon
+            metadata: Additional metadata
+
+        Returns:
+            Step number (None if not in debug mode)
+
+        Example:
+            step = secure.trace_step("click", "button#submit")
+            # ... perform action ...
+            secure.trace_step_end(step, success=True)
+        """
+        if self._tracer:
+            return self._tracer.trace_step_start(
+                action=action,
+                resource=resource,
+                metadata=metadata,
+            )
+        return None
+
+    def trace_step_end(
+        self,
+        step_number: int | None,
+        success: bool = True,
+        result: Any = None,
+        error: str | None = None,
+    ) -> None:
+        """
+        Trace a step end (for manual step tracking).
+
+        Args:
+            step_number: Step number from trace_step()
+            success: Whether the step succeeded
+            result: Step result (optional)
+            error: Error message if failed
+        """
+        if self._tracer and step_number is not None:
+            self._tracer.trace_step_end(
+                step_number=step_number,
+                success=success,
+                result=result,
+                error=error,
+            )
+
+    def trace_snapshot_diff(
+        self,
+        before: dict | None = None,
+        after: dict | None = None,
+        diff: dict | None = None,
+        label: str = "State Change",
+    ) -> None:
+        """
+        Trace a snapshot diff (before/after state change).
+
+        Args:
+            before: Before snapshot (for computing diff)
+            after: After snapshot (for computing diff)
+            diff: Pre-computed diff (if before/after not provided)
+            label: Label for the diff
+        """
+        if not self._tracer:
+            return
+
+        if diff:
+            self._tracer.trace_snapshot_diff(SnapshotDiff(**diff), label=label)
+        elif before is not None and after is not None:
+            # Compute simple diff
+            computed_diff = SnapshotDiff(
+                added=[k for k in after if k not in before],
+                removed=[k for k in before if k not in after],
+                changed=[
+                    {"element": k, "before": before[k], "after": after[k]}
+                    for k in before
+                    if k in after and before[k] != after[k]
+                ],
+            )
+            self._tracer.trace_snapshot_diff(computed_diff, label=label)
+
+    def trace_verification(
+        self,
+        predicate: str,
+        passed: bool,
+        message: str | None = None,
+        expected: Any = None,
+        actual: Any = None,
+    ) -> None:
+        """
+        Trace a verification predicate result.
+
+        Args:
+            predicate: Predicate name or expression
+            passed: Whether verification passed
+            message: Optional message
+            expected: Expected value (for failed verifications)
+            actual: Actual value (for failed verifications)
+        """
+        if self._tracer:
+            self._tracer.trace_verification_result(
+                VerificationResult(
+                    predicate=predicate,
+                    passed=passed,
+                    message=message,
+                    expected=expected,
+                    actual=actual,
+                )
+            )
 
     @classmethod
     def attach(cls, agent: Any, **kwargs: Any) -> SecureAgent:

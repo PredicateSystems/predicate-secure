@@ -134,7 +134,8 @@ async def create_browser_use_runtime(
     try:
         from predicate.agent_runtime import AgentRuntime
         from predicate.backends.browser_use_adapter import BrowserUseAdapter
-        from predicate.tracing import JsonlTraceSink, Tracer as PredicateTracer
+        from predicate.tracing import JsonlTraceSink
+        from predicate.tracing import Tracer as PredicateTracer
     except ImportError as e:
         raise AdapterError(
             f"browser-use adapter requires predicate. Error: {e}",
@@ -201,7 +202,8 @@ def create_playwright_adapter(
     """
     try:
         from predicate.agent_runtime import AgentRuntime
-        from predicate.tracing import JsonlTraceSink, Tracer as PredicateTracer
+        from predicate.tracing import JsonlTraceSink
+        from predicate.tracing import Tracer as PredicateTracer
     except ImportError as e:
         raise AdapterError(
             f"Playwright adapter requires predicate. Error: {e}",
@@ -368,20 +370,14 @@ def create_adapter(
         AdapterError: If framework is not supported
     """
     if framework == Framework.BROWSER_USE:
-        return create_browser_use_adapter(
-            agent, tracer, snapshot_options, predicate_api_key
-        )
+        return create_browser_use_adapter(agent, tracer, snapshot_options, predicate_api_key)
 
     if framework == Framework.PLAYWRIGHT:
-        return create_playwright_adapter(
-            agent, tracer, snapshot_options, predicate_api_key
-        )
+        return create_playwright_adapter(agent, tracer, snapshot_options, predicate_api_key)
 
     if framework == Framework.LANGCHAIN:
         browser = kwargs.get("browser")
-        return create_langchain_adapter(
-            agent, browser, tracer, snapshot_options, predicate_api_key
-        )
+        return create_langchain_adapter(agent, browser, tracer, snapshot_options, predicate_api_key)
 
     if framework == Framework.PYDANTIC_AI:
         return create_pydantic_ai_adapter(agent, tracer)

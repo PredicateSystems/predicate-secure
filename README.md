@@ -1,5 +1,8 @@
 # predicate-secure
 
+[![License](https://img.shields.io/badge/License-MIT%2FApache--2.0-blue.svg)](LICENSE)
+[![PyPI - predicate-secure](https://img.shields.io/pypi/v/predicate-secure.svg)](https://pypi.org/project/predicate-secure/)
+
 Drop-in security wrapper for AI agents. Adds authorization, verification, and audit to any agent framework in 3 lines of code.
 
 ## Features
@@ -67,8 +70,8 @@ secure_agent.run()
 
 `predicate-secure` is a thin orchestration layer that combines:
 
-- **predicate** (sdk-python) - Snapshot engine, DOM pruning, verification predicates
-- **predicate-authority** (AgentIdentity) - Policy engine, mandate signing, audit logging
+- **[predicate-runtime](https://github.com/PredicateSystems/sdk-python)** - Snapshot engine, DOM pruning, verification predicates
+- **[predicate-authority](https://github.com/PredicateSystems/predicate-authority)** - Policy engine, mandate signing, audit logging
 
 ```
 SecureAgent

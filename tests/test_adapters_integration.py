@@ -18,7 +18,6 @@ from predicate_secure import (
     create_pydantic_ai_adapter,
 )
 
-
 # Check if predicate is available
 try:
     from predicate.integrations.browser_use.plugin import PredicateBrowserUsePlugin
