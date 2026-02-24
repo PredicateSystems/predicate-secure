@@ -14,12 +14,12 @@ Requirements:
 
 import tempfile
 
+from predicate_secure import SecureAgent
+
 # Uncomment for actual LangChain usage
 # from langchain.agents import AgentExecutor, create_react_agent
 # from langchain_openai import ChatOpenAI
 # from langchain.tools import Tool
-
-from predicate_secure import SecureAgent
 
 
 def create_tool_policy() -> str:
@@ -67,9 +67,7 @@ rules:
     resource: "*"
     effect: deny
 """
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix="_tool_policy.yaml", delete=False
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix="_tool_policy.yaml", delete=False) as f:
         f.write(policy_content)
         return f.name
 

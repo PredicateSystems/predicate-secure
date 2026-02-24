@@ -59,9 +59,7 @@ rules:
     resource: "*"
     effect: deny
 """
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix="_shopping_policy.yaml", delete=False
-    ) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix="_shopping_policy.yaml", delete=False) as f:
         f.write(policy_content)
         return f.name
 
