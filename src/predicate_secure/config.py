@@ -10,6 +10,9 @@ from typing import Literal
 # Mode type alias
 Mode = Literal["strict", "permissive", "debug", "audit"]
 
+# Trace format type alias
+TraceFormatType = Literal["console", "json"]
+
 
 @dataclass(frozen=True)
 class SecureAgentConfig:
@@ -26,6 +29,10 @@ class SecureAgentConfig:
         signing_key: Secret key for mandate signing (auto-detect from env if not provided)
         mandate_ttl_seconds: TTL for issued mandates
         fail_closed: Whether to fail closed on authorization errors (based on mode)
+        trace_format: Format for debug trace output ("console" or "json")
+        trace_file: Path to trace output file (None for stderr)
+        trace_colors: Whether to use ANSI colors in console output
+        trace_verbose: Whether to output verbose trace information
     """
 
     policy: str | Path | None = None
@@ -36,6 +43,11 @@ class SecureAgentConfig:
     sidecar_url: str | None = None
     signing_key: str | None = None
     mandate_ttl_seconds: int = 300
+    # Debug trace configuration
+    trace_format: TraceFormatType = "console"
+    trace_file: str | Path | None = None
+    trace_colors: bool = True
+    trace_verbose: bool = True
 
     @property
     def fail_closed(self) -> bool:
@@ -68,6 +80,20 @@ class SecureAgentConfig:
             return str(self.policy)
         return self.policy
 
+    @property
+    def is_debug_mode(self) -> bool:
+        """Whether debug mode is enabled."""
+        return self.mode == "debug"
+
+    @property
+    def effective_trace_file(self) -> str | None:
+        """Get trace file path as string."""
+        if self.trace_file is None:
+            return None
+        if isinstance(self.trace_file, Path):
+            return str(self.trace_file)
+        return self.trace_file
+
     @classmethod
     def from_kwargs(
         cls,
@@ -79,11 +105,21 @@ class SecureAgentConfig:
         sidecar_url: str | None = None,
         signing_key: str | None = None,
         mandate_ttl_seconds: int = 300,
+        trace_format: str = "console",
+        trace_file: str | Path | None = None,
+        trace_colors: bool = True,
+        trace_verbose: bool = True,
     ) -> SecureAgentConfig:
         """Create config from keyword arguments with validation."""
         valid_modes = ("strict", "permissive", "debug", "audit")
         if mode not in valid_modes:
             raise ValueError(f"Invalid mode '{mode}'. Must be one of: {valid_modes}")
+
+        valid_formats = ("console", "json")
+        if trace_format not in valid_formats:
+            raise ValueError(
+                f"Invalid trace_format '{trace_format}'. Must be one of: {valid_formats}"
+            )
 
         return cls(
             policy=policy,
@@ -94,6 +130,10 @@ class SecureAgentConfig:
             sidecar_url=sidecar_url,
             signing_key=signing_key,
             mandate_ttl_seconds=mandate_ttl_seconds,
+            trace_format=trace_format,  # type: ignore[arg-type]
+            trace_file=trace_file,
+            trace_colors=trace_colors,
+            trace_verbose=trace_verbose,
         )
 
 

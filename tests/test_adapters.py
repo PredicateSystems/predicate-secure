@@ -2,13 +2,7 @@
 
 import pytest
 
-from predicate_secure import (
-    AdapterError,
-    AdapterResult,
-    Framework,
-    SecureAgent,
-    create_adapter,
-)
+from predicate_secure import AdapterError, AdapterResult, Framework, SecureAgent, create_adapter
 
 
 class TestAdapterResult:
