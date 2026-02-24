@@ -45,7 +45,9 @@ class SecureAgentConfig:
     @property
     def effective_principal_id(self) -> str:
         """Get principal ID, falling back to environment variable."""
-        return self.principal_id or os.getenv("PREDICATE_PRINCIPAL_ID", "agent:default")
+        if self.principal_id:
+            return self.principal_id
+        return os.getenv("PREDICATE_PRINCIPAL_ID") or "agent:default"
 
     @property
     def effective_signing_key(self) -> str:
