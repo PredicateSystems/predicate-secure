@@ -57,7 +57,9 @@ class SnapshotDiff:
 
     added: list[str] = field(default_factory=list)
     removed: list[str] = field(default_factory=list)
-    changed: list[dict] = field(default_factory=list)  # {"element": str, "before": str, "after": str}
+    changed: list[dict] = field(
+        default_factory=list
+    )  # {"element": str, "before": str, "after": str}
 
     def is_empty(self) -> bool:
         """Check if diff is empty (no changes)."""
@@ -215,10 +217,7 @@ class DebugTracer:
         if self.format == TraceFormat.CONSOLE:
             self.output.write("\n")
             self.output.write(self._color("=" * 60, "bold") + "\n")
-            self.output.write(
-                self._color("[predicate-secure]", "cyan")
-                + " Session Start\n"
-            )
+            self.output.write(self._color("[predicate-secure]", "cyan") + " Session Start\n")
             self.output.write(f"  Framework: {self._color(framework, 'blue')}\n")
             self.output.write(f"  Mode: {self._color(mode, 'yellow')}\n")
             if policy:
@@ -248,14 +247,9 @@ class DebugTracer:
         if self.format == TraceFormat.CONSOLE:
             self.output.write("\n")
             self.output.write(self._color("=" * 60, "bold") + "\n")
-            status = (
-                self._color("SUCCESS", "green")
-                if success
-                else self._color("FAILED", "red")
-            )
+            status = self._color("SUCCESS", "green") if success else self._color("FAILED", "red")
             self.output.write(
-                self._color("[predicate-secure]", "cyan")
-                + f" Session End: {status}\n"
+                self._color("[predicate-secure]", "cyan") + f" Session End: {status}\n"
             )
             self.output.write(f"  Total Steps: {self._step_count}\n")
             if duration_ms:
@@ -305,8 +299,7 @@ class DebugTracer:
 
         if self.format == TraceFormat.CONSOLE:
             self.output.write(
-                self._color(f"[Step {step_number}]", "bold")
-                + f" {self._color(action, 'magenta')}"
+                self._color(f"[Step {step_number}]", "bold") + f" {self._color(action, 'magenta')}"
             )
             if resource:
                 self.output.write(f" → {self._color(resource, 'blue')}")
@@ -341,11 +334,7 @@ class DebugTracer:
         self._emit(event)
 
         if self.format == TraceFormat.CONSOLE and self.verbose:
-            status = (
-                self._color("OK", "green")
-                if success
-                else self._color("FAILED", "red")
-            )
+            status = self._color("OK", "green") if success else self._color("FAILED", "red")
             duration_str = f" ({duration_ms:.1f}ms)" if duration_ms else ""
             self.output.write(f"  └─ {status}{duration_str}\n")
             if error:
@@ -379,9 +368,7 @@ class DebugTracer:
             if decision.reason:
                 self.output.write(f"  │  Reason: {decision.reason}\n")
             if decision.policy_rule:
-                self.output.write(
-                    f"  │  Rule: {self._color(decision.policy_rule, 'dim')}\n"
-                )
+                self.output.write(f"  │  Rule: {self._color(decision.policy_rule, 'dim')}\n")
             self.output.flush()
 
     def trace_snapshot_diff(
@@ -404,19 +391,13 @@ class DebugTracer:
 
         if self.format == TraceFormat.CONSOLE:
             if diff.is_empty():
-                self.output.write(
-                    f"  ├─ {label}: {self._color('(no changes)', 'dim')}\n"
-                )
+                self.output.write(f"  ├─ {label}: {self._color('(no changes)', 'dim')}\n")
             else:
                 self.output.write(f"  ├─ {label}:\n")
                 for added in diff.added:
-                    self.output.write(
-                        f"  │  {self._color('+', 'green')} {added}\n"
-                    )
+                    self.output.write(f"  │  {self._color('+', 'green')} {added}\n")
                 for removed in diff.removed:
-                    self.output.write(
-                        f"  │  {self._color('-', 'red')} {removed}\n"
-                    )
+                    self.output.write(f"  │  {self._color('-', 'red')} {removed}\n")
                 for changed in diff.changed:
                     self.output.write(
                         f"  │  {self._color('~', 'yellow')} {changed.get('element', 'unknown')}\n"
@@ -449,11 +430,7 @@ class DebugTracer:
         self._emit(event)
 
         if self.format == TraceFormat.CONSOLE:
-            status = (
-                self._color("PASS", "green")
-                if result.passed
-                else self._color("FAIL", "red")
-            )
+            status = self._color("PASS", "green") if result.passed else self._color("FAIL", "red")
             self.output.write(f"  ├─ Verification: {status}\n")
             self.output.write(f"  │  Predicate: {result.predicate}\n")
             if result.message:

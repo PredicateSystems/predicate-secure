@@ -294,9 +294,7 @@ class TestDebugTracerConsole:
         output = io.StringIO()
         tracer = DebugTracer(format="console", output=output, use_colors=False)
 
-        tracer.trace_verification_result(
-            VerificationResult(predicate="item_in_cart", passed=True)
-        )
+        tracer.trace_verification_result(VerificationResult(predicate="item_in_cart", passed=True))
 
         out = output.getvalue()
         assert "PASS" in out

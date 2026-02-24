@@ -13,11 +13,12 @@ Requirements:
 """
 
 import asyncio
+import tempfile
+
+from predicate_secure import SecureAgent
 
 # Uncomment for actual Playwright usage
 # from playwright.async_api import async_playwright
-
-from predicate_secure import SecureAgent
 
 
 def create_form_policy() -> str:
@@ -56,10 +57,11 @@ rules:
     resource: "*"
     effect: deny
 """
-    policy_path = "/tmp/form_policy.yaml"
-    with open(policy_path, "w") as f:
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix="_form_policy.yaml", delete=False
+    ) as f:
         f.write(policy_content)
-    return policy_path
+        return f.name
 
 
 async def run_secure_form_fill():

@@ -12,6 +12,8 @@ Requirements:
     pip install langchain langchain-openai
 """
 
+import tempfile
+
 # Uncomment for actual LangChain usage
 # from langchain.agents import AgentExecutor, create_react_agent
 # from langchain_openai import ChatOpenAI
@@ -65,10 +67,11 @@ rules:
     resource: "*"
     effect: deny
 """
-    policy_path = "/tmp/tool_policy.yaml"
-    with open(policy_path, "w") as f:
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix="_tool_policy.yaml", delete=False
+    ) as f:
         f.write(policy_content)
-    return policy_path
+        return f.name
 
 
 def run_secure_tool_agent():
