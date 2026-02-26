@@ -95,9 +95,13 @@ Predicate Secure wraps your existing agent code in **3-5 lines** - no rewrites n
 The demo executes a simple but complete browser task:
 
 ✓ Navigate to https://www.example.com with policy check
+
 ✓ Take snapshot with visual element overlay
+
 ✓ Find and click "Learn more" link using semantic query
+
 ✓ Verify URL contains "example-domains" after navigation
+
 ✓ Upload trace to Predicate Studio (if API key provided)
 
 Each action goes through the full authorization + verification loop.
@@ -174,9 +178,11 @@ Authorization rules are declarative YAML:
 
 > **Note:** The policy is fail-closed: any action not explicitly allowed is denied. This prevents agents from taking unexpected actions.
 
-### 3. Verification with Local LLM
+### 3. LLM-Generated Verification Predicates
 
-After each action, the local LLM generates verification predicates:
+After each action, the local LLM analyzes the state changes and generates **deterministic verification predicates** (assertions to check):
+
+> **Important:** The LLM is NOT doing visual verification. Instead, it generates structured assertions (like `url_contains`, `element_exists`) based on observed state changes. The actual verification execution is **deterministic** - predicates are evaluated as true/false checks.
 
 ```python
 # Capture pre and post snapshots
@@ -184,7 +190,7 @@ pre_snapshot = await get_page_summary()
 result = await execute_action()
 post_snapshot = await get_page_summary()
 
-# LLM generates verification plan
+# LLM generates verification plan (what to check, not the check itself)
 verification_plan = verifier.generate_verification_plan(
     action="click",
     action_target="element#6",
@@ -193,7 +199,7 @@ verification_plan = verifier.generate_verification_plan(
     context={"task": "Find and click Learn more link"}
 )
 
-# Execute generated verifications
+# Execute generated predicates deterministically
 for verification in verification_plan.verifications:
     passed = execute_predicate(
         verification.predicate,  # e.g., "url_contains"
@@ -204,7 +210,7 @@ for verification in verification_plan.verifications:
         raise AssertionError("Post-execution verification failed")
 ```
 
-The LLM sees both snapshots and generates appropriate checks:
+The LLM sees both snapshots and generates a structured verification plan:
 
 ```json
 {
@@ -221,6 +227,28 @@ The LLM sees both snapshots and generates appropriate checks:
   "reasoning": "Verify navigation by checking URL change and snapshot difference."
 }
 ```
+
+**For Production Workflows:**
+
+For well-understood web flows (like QA testing flows or regular business processes), you can skip LLM generation and use **human-defined predicates** directly:
+
+```python
+# Predefined verification for known workflows
+verification_plan = VerificationPlan(
+    action="click",
+    verifications=[
+        VerificationSpec(predicate="url_contains", args=["example-domains"]),
+        VerificationSpec(predicate="element_exists", args=["h1"]),
+        VerificationSpec(predicate="snapshot_changed", args=[]),
+    ],
+    reasoning="Predefined checks for 'Learn more' click flow",
+)
+
+# Execute the same way - deterministic evaluation
+all_passed = execute_verifications(verification_plan)
+```
+
+This approach is **faster** (no LLM inference), **more predictable** (explicit assertions), and **ideal for regression testing** of known workflows. Use LLM-generated predicates for exploratory tasks or novel scenarios.
 
 ### 4. Visual Element Overlay
 
