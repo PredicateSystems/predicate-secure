@@ -6,6 +6,8 @@
 
 AI agents are powerful, but how do you ensure they don't go rogue? Today we're releasing **Predicate Secure** - a drop-in security wrapper that adds enterprise-grade authorization and verification to browser automation agents. Think of it as a safety harness for your AI agents.
 
+> **📦 Open Source:** The complete demo is available on GitHub at [PredicateSystems/predicate-secure](https://github.com/PredicateSystems/predicate-secure) (see the `demo/` folder). Get started in 5 minutes with local LLM verification.
+
 **Predicate Secure integrates with your existing AI agent frameworks in just 3-5 lines of code** - including browser-use, LangChain, PydanticAI, raw Playwright, and OpenClaw. This frictionless adoption means you can add robust security without rewriting your agents.
 
 This post walks through our comprehensive demo that showcases the complete agent security loop: pre-execution authorization, browser automation, and post-execution verification using local LLMs.
@@ -17,6 +19,7 @@ When AI agents interact with browsers and web services, they need guardrails. A 
 - Navigating to unauthorized domains
 - Clicking sensitive buttons or forms
 - Exposing credentials or API keys
+- Performing unauthorized actions (e.g., deleting all emails)
 - Executing actions outside policy boundaries
 
 Traditional approaches rely on prompt engineering or hope for the best. **Predicate Secure takes a different approach**: enforce policy before execution, verify outcomes after.
