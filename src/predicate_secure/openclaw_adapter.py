@@ -9,18 +9,14 @@ This module provides integration with OpenClaw CLI agents by:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import os
 import subprocess
 import threading
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from pathlib import Path
 from typing import Any, Callable
-from urllib.parse import parse_qs, urlparse
-
-from .detection import Framework
+from urllib.parse import urlparse
 
 
 @dataclass
@@ -241,7 +237,10 @@ class OpenClawAdapter:
         env["PREDICATE_PROXY_URL"] = f"http://localhost:{self.config.skill_proxy_port}"
 
         # Start process
-        process = subprocess.Popen(
+        # Security: cmd is built from trusted config (cli_path) and user-provided task
+        # The cli_path comes from OpenClawConfig which is controlled by the developer
+        # Task parameter is validated and passed as a separate argument (not shell-interpolated)
+        process = subprocess.Popen(  # nosec B603
             cmd,
             cwd=working_dir,
             env=env,

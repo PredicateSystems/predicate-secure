@@ -360,7 +360,7 @@ def create_openclaw_adapter(
         AdapterError: If OpenClaw adapter initialization fails
     """
     try:
-        from .openclaw_adapter import OpenClawAdapter, OpenClawConfig, create_openclaw_adapter as create_adapter_impl
+        from .openclaw_adapter import create_openclaw_adapter as create_adapter_impl
     except ImportError as e:
         raise AdapterError(
             f"OpenClaw adapter requires openclaw_adapter module. Error: {e}",
