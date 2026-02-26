@@ -6,7 +6,9 @@ repos:
     rev: v4.5.0
     hooks:
       - id: trailing-whitespace
+        exclude: ^(venv/|\.venv/|build/|dist/|demo/)
       - id: end-of-file-fixer
+        exclude: ^(venv/|\.venv/|build/|dist/|demo/)
       - id: check-yaml
       - id: check-json
       - id: check-added-large-files
