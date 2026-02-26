@@ -1,0 +1,27 @@
+# Predicate Secure Demo Requirements
+
+# Core predicate-secure SDK (from parent directory)
+# Install with: pip install -e ..
+
+# Predicate runtime SDK for browser automation
+predicate-runtime==1.1.2
+
+# Predicate authority for pre-execution authorization
+predicate-authority>=0.1.0
+
+# Local LLM support (HuggingFace transformers)
+transformers>=4.35.0
+torch>=2.0.0
+accelerate>=0.24.0
+
+# Optional: Quantization support for lower memory usage
+# bitsandbytes>=0.41.0  # for 8-bit/4-bit quantization
+
+# Environment variable management
+python-dotenv>=1.0.0
+
+# JSON/YAML handling
+pyyaml>=6.0
+
+# Logging and utilities
+rich>=13.0.0  # for pretty console output
