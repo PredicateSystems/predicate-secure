@@ -29,6 +29,8 @@ pip install predicate-secure[all]
 
 ## Quick Start
 
+[User Manual](./docs/user-manual.md)
+
 ```python
 from predicate_secure import SecureAgent
 from browser_use import Agent

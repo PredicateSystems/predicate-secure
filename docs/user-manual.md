@@ -1024,7 +1024,7 @@ pip install predicate-secure[langchain]    # For LangChain
 ### Getting Help
 
 - GitHub Issues: https://github.com/PredicateSystems/py-predicate-secure/issues
-- Documentation: https://predicate.systems/docs
+- Documentation: https://predicatesystems.ai/docs
 
 ---
 

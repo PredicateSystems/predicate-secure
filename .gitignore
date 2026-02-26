@@ -56,3 +56,8 @@ traces/
 artifacts/
 tmp/
 temp/
+
+# Demo output and runtime files
+demo/.env
+demo/output/
+demo/*.log

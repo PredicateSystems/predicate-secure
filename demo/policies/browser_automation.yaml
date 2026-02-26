@@ -1,0 +1,197 @@
+# Predicate Authority Policy for Browser Automation Demo
+#
+# This policy defines authorization rules for browser agent actions.
+# It enforces fail-closed authorization: only explicitly allowed actions
+# can proceed.
+
+version: "1.0"
+
+# Default effect: DENY (fail-closed)
+# All actions must match an ALLOW rule to proceed
+
+rules:
+  # =========================================================================
+  # Navigation Rules
+  # =========================================================================
+
+  - name: allow-navigation-safe-domains
+    effect: ALLOW
+    principals:
+      - "agent:demo-browser"
+      - "agent:*"
+    actions:
+      - "browser.navigate"
+      - "browser.goto"
+    resources:
+      # Allow navigation to safe domains
+      - "https://www.example.com*"
+      - "https://example.com*"
+      - "https://www.google.com*"
+      - "https://www.wikipedia.org*"
+      - "https://en.wikipedia.org*"
+    conditions:
+      # Require snapshot state to be captured
+      required_labels:
+        - "browser_initialized"
+
+  # =========================================================================
+  # Browser Interaction Rules (Snapshot, Click, Type)
+  # =========================================================================
+
+  - name: allow-browser-snapshot
+    effect: ALLOW
+    principals:
+      - "agent:demo-browser"
+      - "agent:*"
+    actions:
+      - "browser.snapshot"
+      - "browser.screenshot"
+    resources:
+      - "*"
+    conditions:
+      required_labels:
+        - "browser_initialized"
+
+  - name: allow-browser-click-safe-elements
+    effect: ALLOW
+    principals:
+      - "agent:demo-browser"
+      - "agent:*"
+    actions:
+      - "browser.click"
+      - "browser.element.click"
+      - "click"  # Allow simple click action
+    resources:
+      # Allow clicks on common safe element types
+      - "element:button[*"
+      - "element:a[*"
+      - "element:input[type=button*"
+      - "element:input[type=submit*"
+      - "element:role=button[*"
+      - "element:role=link[*"
+      - "element:role=searchbox[*"
+      - "element#*"  # Allow clicks on elements by ID (from snapshot)
+    conditions:
+      required_labels:
+        - "element_visible"
+        - "snapshot_captured"
+
+  - name: allow-browser-type-safe-inputs
+    effect: ALLOW
+    principals:
+      - "agent:demo-browser"
+      - "agent:*"
+    actions:
+      - "browser.type"
+      - "browser.fill"
+      - "browser.element.type"
+    resources:
+      # Allow typing in safe input types only
+      - "element:input[type=text*"
+      - "element:input[type=search*"
+      - "element:textarea[*"
+      - "element:role=textbox[*"
+      - "element:role=searchbox[*"
+    conditions:
+      required_labels:
+        - "element_visible"
+        - "snapshot_captured"
+      # Block typing sensitive information patterns
+      deny_patterns:
+        - "password"
+        - "credit_card"
+        - "ssn"
+        - "api_key"
+
+  # =========================================================================
+  # Read/Extract Rules
+  # =========================================================================
+
+  - name: allow-browser-read
+    effect: ALLOW
+    principals:
+      - "agent:demo-browser"
+      - "agent:*"
+    actions:
+      - "browser.read"
+      - "browser.extract"
+      - "browser.get_text"
+    resources:
+      - "*"
+    conditions:
+      required_labels:
+        - "snapshot_captured"
+
+  # =========================================================================
+  # Verification Rules
+  # =========================================================================
+
+  - name: allow-verification-checks
+    effect: ALLOW
+    principals:
+      - "agent:demo-browser"
+      - "agent:*"
+    actions:
+      - "browser.verify"
+      - "browser.assert"
+      - "browser.check_condition"
+    resources:
+      - "*"
+    conditions:
+      required_labels:
+        - "snapshot_captured"
+
+  # =========================================================================
+  # DENY Rules (Explicit blocks)
+  # =========================================================================
+
+  - name: block-sensitive-form-submission
+    effect: DENY
+    principals:
+      - "*"
+    actions:
+      - "browser.click"
+      - "browser.type"
+    resources:
+      # Block interactions with sensitive forms
+      - "element:input[type=password*"
+      - "element:input[name=password*"
+      - "element:input[name=credit*"
+      - "element:input[type=credit*"
+      - "element:*[name=ssn*"
+      - "element:*[name=social_security*"
+    conditions:
+      reason: "Sensitive form field interaction blocked by policy"
+
+  - name: block-dangerous-domains
+    effect: DENY
+    principals:
+      - "*"
+    actions:
+      - "browser.navigate"
+      - "browser.goto"
+    resources:
+      # Block navigation to dangerous or untrusted domains
+      - "http://*"  # Force HTTPS
+      - "https://malicious-site.com*"
+      - "https://*.onion*"
+      - "file://*"
+      - "data:*"
+      - "javascript:*"
+    conditions:
+      reason: "Navigation to dangerous domain blocked by policy"
+
+  # =========================================================================
+  # Default DENY (implicit - any action not matching above)
+  # =========================================================================
+
+  - name: default-deny
+    effect: DENY
+    principals:
+      - "*"
+    actions:
+      - "*"
+    resources:
+      - "*"
+    conditions:
+      reason: "Action denied by default (no matching allow rule)"
