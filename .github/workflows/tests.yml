@@ -33,7 +33,7 @@ jobs:
 
       - name: Run security checks
         run: |
-          python -m bandit -q -r src/predicate_secure/
+          python -m bandit -q -r src/predicate_secure/ -c pyproject.toml
 
   lint:
     runs-on: ubuntu-latest

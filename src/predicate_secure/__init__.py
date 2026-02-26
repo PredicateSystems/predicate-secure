@@ -410,6 +410,8 @@ class SecureAgent:
                 result = self._run_langchain(task)
             elif self._wrapped.framework == Framework.PYDANTIC_AI.value:
                 result = self._run_pydantic_ai(task)
+            elif self._wrapped.framework == Framework.OPENCLAW.value:
+                result = self._run_openclaw(task)
             else:
                 raise NotImplementedError(
                     f"run() not implemented for framework: {self._wrapped.framework}"
@@ -480,6 +482,52 @@ class SecureAgent:
     def _run_pydantic_ai(self, task: str | None) -> Any:
         """Run PydanticAI agent with authorization."""
         raise NotImplementedError("PydanticAI integration not yet implemented.")
+
+    def _run_openclaw(self, task: str | None) -> Any:
+        """Run OpenClaw CLI agent with authorization."""
+        try:
+            from .openclaw_adapter import OpenClawAdapter, create_openclaw_adapter
+        except ImportError:
+            raise NotImplementedError(
+                "OpenClaw integration requires openclaw_adapter module. "
+                "Ensure all dependencies are installed."
+            )
+
+        # Get or create adapter
+        if not hasattr(self._wrapped, "openclaw_adapter"):
+            # Create adapter from original agent config
+            authorizer = self._create_pre_action_authorizer()
+            adapter = create_openclaw_adapter(self._wrapped.original, authorizer)
+            self._wrapped.metadata["openclaw_adapter"] = adapter
+        else:
+            adapter = self._wrapped.metadata.get("openclaw_adapter")
+
+        if not isinstance(adapter, OpenClawAdapter):
+            raise ValueError("Invalid OpenClaw adapter")
+
+        # Start proxy server
+        adapter.start_proxy()
+
+        try:
+            # Start CLI with task
+            if task is None:
+                raise ValueError("Task is required for OpenClaw agents")
+
+            process = adapter.start_cli(task)
+
+            # Wait for completion
+            stdout, stderr = process.communicate()
+
+            # Check for errors
+            if process.returncode != 0:
+                raise RuntimeError(f"OpenClaw CLI failed: {stderr}")
+
+            return {"stdout": stdout, "stderr": stderr, "returncode": process.returncode}
+
+        finally:
+            # Cleanup
+            adapter.stop_cli()
+            adapter.stop_proxy()
 
     def trace_step(
         self,

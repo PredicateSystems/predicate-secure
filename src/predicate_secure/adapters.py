@@ -342,6 +342,52 @@ def create_pydantic_ai_adapter(
     )
 
 
+def create_openclaw_adapter(
+    agent: Any,
+    authorizer: Any | None = None,
+) -> AdapterResult:
+    """
+    Create adapter for OpenClaw CLI agent.
+
+    Args:
+        agent: OpenClaw config dict or OpenClawConfig object
+        authorizer: Optional authorization callback
+
+    Returns:
+        AdapterResult with OpenClawAdapter
+
+    Raises:
+        AdapterError: If OpenClaw adapter initialization fails
+    """
+    try:
+        from .openclaw_adapter import create_openclaw_adapter as create_adapter_impl
+    except ImportError as e:
+        raise AdapterError(
+            f"OpenClaw adapter requires openclaw_adapter module. Error: {e}",
+            Framework.OPENCLAW,
+        ) from e
+
+    try:
+        adapter = create_adapter_impl(agent, authorizer)
+        return AdapterResult(
+            agent_runtime=None,  # OpenClaw uses HTTP proxy pattern
+            backend=None,
+            tracer=None,
+            plugin=adapter,  # The adapter itself acts as the plugin
+            executor=None,
+            metadata={
+                "framework": "openclaw",
+                "proxy_port": adapter.config.skill_proxy_port,
+                "skill_name": adapter.config.skill_name,
+            },
+        )
+    except Exception as e:
+        raise AdapterError(
+            f"Failed to create OpenClaw adapter: {e}",
+            Framework.OPENCLAW,
+        ) from e
+
+
 def create_adapter(
     agent: Any,
     framework: Framework,
@@ -381,6 +427,10 @@ def create_adapter(
 
     if framework == Framework.PYDANTIC_AI:
         return create_pydantic_ai_adapter(agent, tracer)
+
+    if framework == Framework.OPENCLAW:
+        authorizer = kwargs.get("authorizer")
+        return create_openclaw_adapter(agent, authorizer)
 
     raise AdapterError(
         f"No adapter available for framework: {framework.value}",
