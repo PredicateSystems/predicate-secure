@@ -60,6 +60,7 @@ rules:
     actions:
       - "browser.click"
       - "browser.element.click"
+      - "click"  # Allow simple click action
     resources:
       # Allow clicks on common safe element types
       - "element:button[*"
@@ -69,6 +70,7 @@ rules:
       - "element:role=button[*"
       - "element:role=link[*"
       - "element:role=searchbox[*"
+      - "element#*"  # Allow clicks on elements by ID (from snapshot)
     conditions:
       required_labels:
         - "element_visible"

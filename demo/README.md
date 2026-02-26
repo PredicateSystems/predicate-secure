@@ -60,8 +60,9 @@ This demo showcases the complete **pre-execution authorization + post-execution 
 - **Fail-Closed by Default**: All actions denied unless explicitly allowed by policy
 - **Dynamic Verification**: Local LLM generates verification assertions based on action context and page state
 - **Visual Element Overlay**: Watch the browser highlight detected DOM elements with colored boxes during snapshot
+- **Cloud Tracing**: When API key is provided, authorization and verification events are automatically traced to Predicate Studio
 - **Rich Console Output**: Beautiful terminal output with real-time progress indicators
-- **Audit Trail**: All authorization decisions and verification results logged
+- **Audit Trail**: All authorization decisions and verification results logged locally and to cloud (if API key provided)
 
 ## Prerequisites
 
@@ -76,13 +77,23 @@ This demo showcases the complete **pre-execution authorization + post-execution 
 
 The demo works with **FREE TIER** (local browser extension only) by default. No API key needed!
 
-If you have a Predicate API key for enhanced features:
+If you have a Predicate API key, you get enhanced features:
 ```bash
 # In .env
 PREDICATE_API_KEY=your-api-key-here
 ```
 
-**Free tier is completely sufficient for this demo.** The demo works entirely offline after initial model download.
+**With API key, you get:**
+- ✅ **Cloud Tracing**: Authorization and verification events automatically uploaded to Predicate Studio
+- ✅ **Visual Timeline**: View execution flow, authorization decisions, and verification results in the Studio UI
+- ✅ **API-based Snapshots**: Faster and more reliable snapshot capture
+- ✅ **Run ID**: Each demo run gets a unique UUID for tracking in Studio
+
+**Without API key (FREE TIER):**
+- ✅ Full demo functionality
+- ✅ Local browser extension
+- ✅ Offline operation (after model download)
+- ✅ Console logging of all events
 
 ### Required Packages
 

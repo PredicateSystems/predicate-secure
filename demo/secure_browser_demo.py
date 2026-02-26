@@ -13,7 +13,9 @@ import json
 import logging
 import os
 import sys
+import uuid
 from pathlib import Path
+from datetime import datetime
 
 from dotenv import load_dotenv
 from rich.console import Console
@@ -68,6 +70,11 @@ class SecureBrowserDemo:
         self.verifier = None
         self.secure_agent = None
         self.browser = None
+        self.tracer = None
+
+        # Generate run ID for cloud tracing
+        self.run_id = str(uuid.uuid4())
+        self.run_label = f"predicate-secure-demo-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
     def _init_verifier(self):
         """Initialize local LLM verifier."""
@@ -82,6 +89,39 @@ class SecureBrowserDemo:
                 self.verifier = create_verifier_from_env()
                 progress.update(task, completed=True)
             console.print("[green]✓[/green] Verifier initialized\n")
+
+    def _init_tracer(self):
+        """Initialize cloud tracer if API key is provided."""
+        api_key = os.getenv("PREDICATE_API_KEY")
+        if not api_key or self.tracer is not None:
+            return
+
+        console.print("\n[bold cyan]Initializing Cloud Tracer...[/bold cyan]")
+
+        try:
+            from predicate.tracer_factory import create_tracer
+
+            self.tracer = create_tracer(
+                api_key=api_key,
+                run_id=self.run_id,
+                upload_trace=True,
+                goal=f"[demo] {self.task_description}",
+                agent_type="predicate-secure/demo",
+                llm_model="Qwen/Qwen2.5-7B-Instruct",
+                start_url=self.start_url,
+            )
+
+            console.print("[green]✓[/green] Cloud tracer initialized")
+            console.print(f"  [dim]Run ID: {self.run_id}[/dim]")
+            console.print(f"  [dim]Run Label: {self.run_label}[/dim]")
+            console.print(
+                f"  [dim]View trace in Predicate Studio: https://studio.predicatesystems.dev/runs/{self.run_id}[/dim]\n"
+            )
+        except Exception as e:
+            logger.warning(f"Failed to initialize cloud tracer: {e}")
+            console.print(
+                f"  [yellow]⚠[/yellow] Cloud tracer initialization failed: {e}\n"
+            )
 
     def _init_secure_agent(self):
         """Initialize SecureAgent with predicate-authority integration."""
@@ -139,6 +179,7 @@ class SecureBrowserDemo:
         try:
             # Step 1: Initialize components
             self._init_verifier()
+            self._init_tracer()  # Initialize cloud tracer if API key provided
             self._init_secure_agent()
 
             # Step 2: Initialize browser (with authorization)
@@ -205,12 +246,15 @@ class SecureBrowserDemo:
             executor=lambda: self.browser.goto(self.start_url),  # Returns coroutine
         )
 
-        # Action 2: Take snapshot
-        await self._authorized_action(
+        # Action 2: Take snapshot to find clickable elements
+        snapshot = await self._authorized_action(
             action="snapshot",
             target="current_page",
             executor=lambda: self._take_snapshot(),  # Returns coroutine
         )
+
+        # Action 3: Find and click the "Learn more" link using semantic query
+        await self._find_and_click_link(snapshot, "Learn more")
 
         console.print("\n[green]✓[/green] Task completed successfully\n")
 
@@ -230,6 +274,19 @@ class SecureBrowserDemo:
         # In a full implementation, this would call SecureAgent.authorize()
         # For this demo, we'll simulate the authorization check
         authorized = self._check_authorization(action, target)
+
+        # Emit authorization event to cloud tracer
+        if self.tracer:
+            self.tracer.emit(
+                "authorization",
+                data={
+                    "action": action,
+                    "target": target,
+                    "principal": self.principal_id,
+                    "authorized": authorized,
+                    "policy_file": str(self.policy_file),
+                },
+            )
 
         if not authorized:
             console.print("  [red]✗[/red] Action denied by policy")
@@ -279,11 +336,33 @@ class SecureBrowserDemo:
         console.print("  [dim]Executing verifications...[/dim]")
         all_passed = self._execute_verifications(verification_plan)
 
+        # Emit verification event to cloud tracer
+        if self.tracer:
+            self.tracer.emit(
+                "verification",
+                data={
+                    "action": action,
+                    "target": target,
+                    "verifications": [
+                        {
+                            "predicate": v.predicate,
+                            "args": v.args,
+                            "passed": v.passed if hasattr(v, "passed") else None,
+                        }
+                        for v in verification_plan.verifications
+                    ],
+                    "reasoning": verification_plan.reasoning,
+                    "all_passed": all_passed,
+                },
+            )
+
         if all_passed:
             console.print("  [green]✓[/green] All verifications passed")
         else:
             console.print("  [red]✗[/red] Some verifications failed")
             raise AssertionError("Post-execution verification failed")
+
+        return result
 
     def _check_authorization(self, action: str, target: str) -> bool:
         """Check if action is authorized by policy.
@@ -314,6 +393,54 @@ class SecureBrowserDemo:
         else:
             # For other actions, default to allow for demo
             return True
+
+    async def _find_and_click_link(self, snapshot, link_text: str):
+        """Find a link by text using semantic query and click it.
+
+        This demonstrates using the predicate SDK's find() function for
+        semantic element selection from snapshot.
+        """
+        from predicate import find
+
+        console.print(f"\n[yellow]→[/yellow] Finding link with text: '{link_text}'")
+
+        # Use semantic query to find the link
+        # The find() function returns the best match by importance
+        element = find(snapshot, f"role=link text~'{link_text}'")
+
+        if not element:
+            console.print(f"  [yellow]⚠[/yellow] Link '{link_text}' not found, skipping click")
+            return
+
+        console.print(f"  [green]✓[/green] Found element: {element.text} (ID: {element.id})")
+        console.print(f"    [dim]Role: {element.role}, Clickable: {element.visual_cues.is_clickable}[/dim]")
+
+        # Click the element using the authorized action pattern
+        # Post-verification will automatically check that URL contains "example-domains" after click
+        await self._authorized_action(
+            action="click",
+            target=f"element#{element.id}",
+            executor=lambda: self._click_element(element),  # Returns coroutine
+        )
+
+    async def _click_element(self, element):
+        """Click an element by its ID."""
+        # Use Playwright's selector to click the element
+        # The element.id is the unique identifier from the snapshot
+        selector = f"[data-sentience-id='{element.id}']"
+
+        try:
+            await self.browser.page.click(selector, timeout=5000)
+            console.print(f"    [dim]Clicked element with selector: {selector}[/dim]")
+        except Exception as e:
+            # Fallback: try clicking by XPath or other means
+            console.print(f"    [yellow]⚠[/yellow] Direct click failed, trying alternative: {e}")
+            # Use bounding box to click by coordinates
+            await self.browser.page.mouse.click(
+                element.bbox.x + element.bbox.width / 2,
+                element.bbox.y + element.bbox.height / 2,
+            )
+            console.print(f"    [dim]Clicked at coordinates: ({element.bbox.x}, {element.bbox.y})[/dim]")
 
     async def _get_page_summary(self) -> str:
         """Get summary of current page state."""
@@ -427,6 +554,18 @@ class SecureBrowserDemo:
                 console.print("[green]✓[/green] Browser closed")
             except Exception as e:
                 logger.warning(f"Error closing browser: {e}")
+
+        # Close cloud tracer (blocking to ensure upload completes)
+        if self.tracer:
+            try:
+                console.print("[dim]Uploading trace to Predicate Studio...[/dim]")
+                self.tracer.close(blocking=True)
+                console.print("[green]✓[/green] Trace uploaded")
+                console.print(
+                    f"  [dim]View in Studio: https://studio.predicatesystems.dev/runs/{self.run_id}[/dim]"
+                )
+            except Exception as e:
+                logger.warning(f"Error closing tracer: {e}")
 
 
 async def main():

@@ -179,6 +179,8 @@ The demo executed a complete **pre-execution authorization + post-execution veri
    - `snapshot_changed()` - Check page loaded ✓
 4. **Snapshot**: Captured page elements with **visual overlay highlights** ✓
    - Watch the browser window - you'll see colored boxes around detected DOM elements!
+5. **Cloud Tracing** (if API key set): Events uploaded to Predicate Studio ✓
+   - View the execution timeline at: `https://studio.predicatesystems.dev/runs/{run_id}`
 
 All checks passed → Action successful!
 
