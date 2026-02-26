@@ -482,6 +482,133 @@ secure_agent = SecureAgent(
 
 ---
 
+### OpenClaw
+
+[OpenClaw](https://github.com/openclaw/openclaw) is a local-first AI agent framework that connects to messaging platforms. SecureAgent integrates with OpenClaw CLI via HTTP proxy interception.
+
+#### Architecture
+
+The OpenClaw adapter works by:
+1. Starting an HTTP proxy server that intercepts OpenClaw skill calls
+2. Enforcing authorization policies before forwarding to actual skills
+3. Managing the OpenClaw CLI subprocess lifecycle
+
+```
+Python SecureAgent
+      │
+      ├─── HTTP Proxy (localhost:8788) ───┐
+      │                                    ▼
+      └─── spawns ──────► OpenClaw CLI ──► predicate-snapshot skill
+                              │
+                              └─► Browser actions (authorized)
+```
+
+#### Basic Usage
+
+```python
+from predicate_secure import SecureAgent
+from predicate_secure.openclaw_adapter import OpenClawConfig
+
+# Create OpenClaw configuration
+openclaw_config = OpenClawConfig(
+    cli_path="/usr/local/bin/openclaw",  # Or None to use PATH
+    skill_proxy_port=8788,
+    skill_name="predicate-snapshot",
+)
+
+# Or use a dict:
+# openclaw_config = {
+#     "openclaw_cli_path": "/usr/local/bin/openclaw",
+#     "skill_proxy_port": 8788,
+# }
+
+# Wrap with SecureAgent
+secure_agent = SecureAgent(
+    agent=openclaw_config,
+    policy="policies/openclaw.yaml",
+    mode="strict",
+)
+
+# Run a task
+result = secure_agent.run(task="Navigate to example.com and take a snapshot")
+```
+
+#### Policy Example for OpenClaw
+
+```yaml
+# policies/openclaw.yaml
+rules:
+  # Allow snapshot skill
+  - action: "openclaw.skill.predicate-snapshot"
+    resource: "*"
+    effect: allow
+
+  # Allow clicking elements
+  - action: "openclaw.skill.predicate-act.click"
+    resource: "element:*"
+    effect: allow
+
+  # Allow typing (but not in password fields)
+  - action: "openclaw.skill.predicate-act.type"
+    resource: "element:*"
+    effect: allow
+    conditions:
+      - not_contains: ["password", "ssn"]
+
+  # Block scroll actions
+  - action: "openclaw.skill.predicate-act.scroll"
+    resource: "*"
+    effect: deny
+
+  # Default deny
+  - action: "*"
+    resource: "*"
+    effect: deny
+```
+
+#### Proxy Configuration
+
+The HTTP proxy intercepts requests to OpenClaw skills:
+
+```python
+from predicate_secure.openclaw_adapter import create_openclaw_adapter, OpenClawConfig
+
+config = OpenClawConfig(skill_proxy_port=8788)
+
+# Custom authorizer function
+def my_authorizer(action: str, context: dict) -> bool:
+    # Custom authorization logic
+    if "snapshot" in action:
+        return True
+    print(f"Blocked: {action}")
+    return False
+
+adapter = create_openclaw_adapter(config, authorizer=my_authorizer)
+
+# Start proxy
+adapter.start_proxy()
+print("Proxy running on http://localhost:8788")
+
+# ... run OpenClaw tasks ...
+
+# Cleanup
+adapter.cleanup()
+```
+
+#### Environment Variables
+
+Configure OpenClaw skill to use the proxy:
+
+```bash
+export PREDICATE_PROXY_URL="http://localhost:8788"
+```
+
+The OpenClaw adapter automatically sets this when starting the CLI subprocess.
+
+**Full example:** [examples/openclaw_browser_automation.py](../examples/openclaw_browser_automation.py)
+
+---
+
 ## Modes
 
 SecureAgent supports four execution modes:

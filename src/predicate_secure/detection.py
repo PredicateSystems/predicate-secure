@@ -14,6 +14,7 @@ class Framework(Enum):
     PLAYWRIGHT = "playwright"
     LANGCHAIN = "langchain"
     PYDANTIC_AI = "pydantic_ai"
+    OPENCLAW = "openclaw"
     UNKNOWN = "unknown"
 
 
@@ -58,6 +59,11 @@ class FrameworkDetector:
 
         # Check PydanticAI
         result = cls._check_pydantic_ai(agent)
+        if result:
+            return result
+
+        # Check OpenClaw
+        result = cls._check_openclaw(agent)
         if result:
             return result
 
@@ -178,6 +184,48 @@ class FrameworkDetector:
                 confidence=1.0,
                 metadata={"module": module},
             )
+
+        return None
+
+    @classmethod
+    def _check_openclaw(cls, agent: Any) -> DetectionResult | None:
+        """Check if agent is an OpenClaw agent wrapper."""
+        agent_type = type(agent)
+        module = getattr(agent_type, "__module__", "")
+
+        # Check by module path
+        if "openclaw" in module.lower():
+            return DetectionResult(
+                framework=Framework.OPENCLAW,
+                agent_type=agent_type.__name__,
+                confidence=1.0,
+                metadata={"module": module},
+            )
+
+        # Check for OpenClaw-specific attributes
+        # OpenClaw wrapper would have: process handle, config, skill_url
+        if hasattr(agent, "openclaw_process") or hasattr(agent, "openclaw_config"):
+            return DetectionResult(
+                framework=Framework.OPENCLAW,
+                agent_type=agent_type.__name__,
+                confidence=0.9,
+                metadata={
+                    "module": module,
+                    "detection": "attribute_based",
+                    "has_process": hasattr(agent, "openclaw_process"),
+                    "has_config": hasattr(agent, "openclaw_config"),
+                },
+            )
+
+        # Check if it's a dict-like config for OpenClaw CLI
+        if isinstance(agent, dict):
+            if "openclaw_cli_path" in agent or "skill_proxy_url" in agent:
+                return DetectionResult(
+                    framework=Framework.OPENCLAW,
+                    agent_type="OpenClawConfig",
+                    confidence=0.8,
+                    metadata={"detection": "config_dict"},
+                )
 
         return None
 

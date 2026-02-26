@@ -64,7 +64,7 @@ secure_agent.run()
 | LangChain | Supported |
 | Playwright | Supported |
 | PydanticAI | Supported |
-| OpenClaw | Planned |
+| OpenClaw | Supported |
 
 ## Architecture
 
