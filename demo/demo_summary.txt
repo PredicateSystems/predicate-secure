@@ -2,7 +2,7 @@
 PREDICATE SECURE DEMO - SUMMARY
 ================================================================================
 
-Location: /Users/guoliangwang/Code/Sentience/predicate-secure/py-predicate-secure/demo/
+Location: /Users/PredicateDEV/Code/Sentience/predicate-secure/py-predicate-secure/demo/
 
 ================================================================================
 WHAT WAS CREATED
@@ -95,7 +95,7 @@ QUICK START
 ================================================================================
 
 1. Install dependencies:
-   cd /Users/guoliangwang/Code/Sentience/predicate-secure/py-predicate-secure
+   cd /Users/PredicateDEV/Code/Sentience/predicate-secure/py-predicate-secure
    pip install -e .
    cd demo
    pip install -r requirements.txt

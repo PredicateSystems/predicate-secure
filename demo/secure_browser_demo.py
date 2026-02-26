@@ -9,13 +9,13 @@ The demo runs a simple browser task with full authorization and verification.
 """
 
 import asyncio
-import json
 import logging
 import os
 import sys
 import uuid
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+from typing import Callable
 
 from dotenv import load_dotenv
 from rich.console import Console
@@ -26,11 +26,12 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 # Add parent directory to path for importing predicate_secure
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from predicate_secure import SecureAgent
-from predicate_secure.openclaw_adapter import OpenClawConfig
+from local_llm_verifier import (  # noqa: E402
+    VerificationPlan,
+    create_verifier_from_env,
+)
 
-# Import local LLM verifier
-from local_llm_verifier import VerificationPlan, create_verifier_from_env
+from predicate_secure import SecureAgent  # noqa: E402
 
 # Setup logging
 logging.basicConfig(
@@ -119,9 +120,7 @@ class SecureBrowserDemo:
             )
         except Exception as e:
             logger.warning(f"Failed to initialize cloud tracer: {e}")
-            console.print(
-                f"  [yellow]⚠[/yellow] Cloud tracer initialization failed: {e}\n"
-            )
+            console.print(f"  [yellow]⚠[/yellow] Cloud tracer initialization failed: {e}\n")
 
     def _init_secure_agent(self):
         """Initialize SecureAgent with predicate-authority integration."""
@@ -136,9 +135,6 @@ class SecureBrowserDemo:
 
         try:
             # Create secure agent with browser-like config
-            # Note: SecureAgent expects an agent object, so we'll create a simple wrapper
-            from predicate import PredicateBrowser
-
             # Create browser config (but don't start yet)
             browser_config = {
                 "headless": os.getenv("BROWSER_HEADLESS", "false").lower() == "true",
@@ -154,9 +150,9 @@ class SecureBrowserDemo:
                 trace_format="console",
             )
 
-            console.print(f"[green]✓[/green] SecureAgent initialized")
+            console.print("[green]✓[/green] SecureAgent initialized")
             console.print(f"  Policy: {self.policy_file}")
-            console.print(f"  Mode: strict (fail-closed)")
+            console.print("  Mode: strict (fail-closed)")
             console.print(f"  Principal: {self.principal_id}\n")
 
         except Exception as e:
@@ -258,7 +254,7 @@ class SecureBrowserDemo:
 
         console.print("\n[green]✓[/green] Task completed successfully\n")
 
-    async def _authorized_action(self, action: str, target: str, executor: callable):
+    async def _authorized_action(self, action: str, target: str, executor: Callable):
         """Execute an action with pre-authorization and post-verification.
 
         This is the core loop demonstrating:
@@ -304,7 +300,7 @@ class SecureBrowserDemo:
         try:
             result = executor()
             # Await if the result is a coroutine
-            if hasattr(result, '__await__'):
+            if hasattr(result, "__await__"):
                 result = await result
             console.print("  [green]✓[/green] Action executed")
         except Exception as e:
@@ -372,17 +368,8 @@ class SecureBrowserDemo:
 
         For this demo, we'll use simplified logic based on the policy.
         """
-        # Map demo actions to policy actions
-        action_map = {
-            "navigate": "browser.navigate",
-            "snapshot": "browser.snapshot",
-            "click": "browser.click",
-            "type": "browser.type",
-        }
-
-        policy_action = action_map.get(action, action)
-
         # Simple checks based on our policy
+        # In production, this would use policy_action from action_map for proper validation
         if action == "navigate":
             # Check if target URL is in allowed domains
             allowed_domains = ["example.com", "google.com", "wikipedia.org"]
@@ -413,7 +400,9 @@ class SecureBrowserDemo:
             return
 
         console.print(f"  [green]✓[/green] Found element: {element.text} (ID: {element.id})")
-        console.print(f"    [dim]Role: {element.role}, Clickable: {element.visual_cues.is_clickable}[/dim]")
+        console.print(
+            f"    [dim]Role: {element.role}, Clickable: {element.visual_cues.is_clickable}[/dim]"
+        )
 
         # Click the element using the authorized action pattern
         # Post-verification will automatically check that URL contains "example-domains" after click
@@ -440,7 +429,9 @@ class SecureBrowserDemo:
                 element.bbox.x + element.bbox.width / 2,
                 element.bbox.y + element.bbox.height / 2,
             )
-            console.print(f"    [dim]Clicked at coordinates: ({element.bbox.x}, {element.bbox.y})[/dim]")
+            console.print(
+                f"    [dim]Clicked at coordinates: ({element.bbox.x}, {element.bbox.y})[/dim]"
+            )
 
     async def _get_page_summary(self) -> str:
         """Get summary of current page state."""
@@ -465,8 +456,8 @@ class SecureBrowserDemo:
     async def _take_snapshot(self):
         """Take a snapshot of the current page."""
         # Use snapshot_async which handles API vs extension automatically
-        from predicate.snapshot import snapshot_async
         from predicate.models import SnapshotOptions
+        from predicate.snapshot import snapshot_async
 
         # Take snapshot with overlay enabled to show element highlights
         # This makes it visual and educational - you can see what elements are detected!
@@ -496,9 +487,9 @@ class SecureBrowserDemo:
             try:
                 passed = self._execute_predicate(verif.predicate, verif.args)
                 if passed:
-                    console.print(f"        [green]✓[/green] Passed")
+                    console.print("        [green]✓[/green] Passed")
                 else:
-                    console.print(f"        [red]✗[/red] Failed")
+                    console.print("        [red]✗[/red] Failed")
                     all_passed = False
             except Exception as e:
                 console.print(f"        [red]✗[/red] Error: {e}")
@@ -518,7 +509,7 @@ class SecureBrowserDemo:
         try:
             if predicate == "url_contains":
                 substring = args[0] if args else ""
-                return substring in self.browser.page.url
+                return bool(substring in self.browser.page.url)
 
             elif predicate == "url_changed":
                 # For demo, assume URL changed if we navigated
@@ -530,18 +521,18 @@ class SecureBrowserDemo:
 
             elif predicate == "element_exists":
                 selector = args[0] if args else ""
-                return self.browser.page.locator(selector).count() > 0
+                return bool(self.browser.page.locator(selector).count() > 0)
 
             elif predicate == "element_visible":
                 selector = args[0] if args else ""
-                return self.browser.page.locator(selector).is_visible()
+                return bool(self.browser.page.locator(selector).is_visible())
 
             else:
-                logger.warning(f"Unknown predicate: {predicate}")
+                logger.warning("Unknown predicate: %s", predicate)
                 return False
 
         except Exception as e:
-            logger.warning(f"Predicate execution failed: {e}")
+            logger.warning("Predicate execution failed: %s", e)
             return False
 
     async def _cleanup(self):

@@ -98,7 +98,7 @@ User Request
 
 ### Run the Demo
 ```bash
-cd /Users/guoliangwang/Code/Sentience/predicate-secure/py-predicate-secure/demo
+cd /Users/PredicateDEV/Code/Sentience/predicate-secure/py-predicate-secure/demo
 python secure_browser_demo.py
 ```
 

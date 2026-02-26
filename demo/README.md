@@ -484,9 +484,9 @@ playwright install chromium
 
 ## References
 
-- **predicate-authority User Manual**: `/Users/guoliangwang/Code/Sentience/AgentIdentity/docs/predicate-authority-user-manual.md`
-- **sdk-python Documentation**: `/Users/guoliangwang/Code/Sentience/sdk-python/README.md`
-- **predicate-secure Documentation**: `/Users/guoliangwang/Code/Sentience/predicate-secure/py-predicate-secure/README.md`
+- **predicate-authority User Manual**: `/Users/PredicateDEV/Code/Sentience/AgentIdentity/docs/predicate-authority-user-manual.md`
+- **sdk-python Documentation**: `/Users/PredicateDEV/Code/Sentience/sdk-python/README.md`
+- **predicate-secure Documentation**: `/Users/PredicateDEV/Code/Sentience/predicate-secure/py-predicate-secure/README.md`
 
 ## Support
 

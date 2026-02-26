@@ -11,7 +11,9 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
+
+from transformers import AutoModelForCausalLM, AutoTokenizer  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -62,24 +64,21 @@ class LocalLLMVerifier:
         self.max_tokens = max_tokens
         self.temperature = temperature
 
-        self._model = None
-        self._tokenizer = None
+        self._model: Optional[Any] = None
+        self._tokenizer: Optional[Any] = None
         self._initialized = False
 
-    def _lazy_init(self):
+    def _lazy_init(self) -> None:
         """Lazy initialization of model and tokenizer."""
         if self._initialized:
             return
 
-        logger.info(f"Loading local LLM model: {self.model_name}")
+        logger.info("Loading local LLM model: %s", self.model_name)
 
         try:
-            from transformers import AutoModelForCausalLM, AutoTokenizer
 
             # Load tokenizer
-            self._tokenizer = AutoTokenizer.from_pretrained(
-                self.model_name, trust_remote_code=True
-            )
+            self._tokenizer = AutoTokenizer.from_pretrained(self.model_name, trust_remote_code=True)
 
             # Load model with automatic device mapping
             self._model = AutoModelForCausalLM.from_pretrained(
@@ -241,6 +240,9 @@ Return ONLY valid JSON matching this schema:
 
     def _generate(self, system_prompt: str, user_prompt: str) -> str:
         """Generate text using the local LLM."""
+        assert self._tokenizer is not None, "Tokenizer not initialized"
+        assert self._model is not None, "Model not initialized"
+
         # Format as chat messages
         messages = [
             {"role": "system", "content": system_prompt},
@@ -248,24 +250,24 @@ Return ONLY valid JSON matching this schema:
         ]
 
         # Apply chat template
-        text = self._tokenizer.apply_chat_template(
+        text = self._tokenizer.apply_chat_template(  # type: ignore
             messages, tokenize=False, add_generation_prompt=True
         )
 
         # Tokenize
-        inputs = self._tokenizer([text], return_tensors="pt").to(self._model.device)
+        inputs = self._tokenizer([text], return_tensors="pt").to(self._model.device)  # type: ignore
 
         # Generate
-        outputs = self._model.generate(
+        outputs = self._model.generate(  # type: ignore
             **inputs,
             max_new_tokens=self.max_tokens,
             temperature=self.temperature if self.temperature > 0 else None,
             do_sample=self.temperature > 0,
-            pad_token_id=self._tokenizer.eos_token_id,
+            pad_token_id=self._tokenizer.eos_token_id,  # type: ignore
         )
 
         # Decode
-        generated_text = self._tokenizer.decode(outputs[0], skip_special_tokens=True)
+        generated_text: str = self._tokenizer.decode(outputs[0], skip_special_tokens=True)  # type: ignore
 
         # Extract response (everything after the user prompt)
         # This handles the chat template format
@@ -275,7 +277,7 @@ Return ONLY valid JSON matching this schema:
             response = generated_text.split("assistant\n")[-1]
         else:
             # Fallback: take everything after user prompt
-            response = generated_text[len(text) :]
+            response = generated_text[len(str(text)) :]
 
         return response.strip()
 
@@ -314,9 +316,7 @@ Return ONLY valid JSON matching this schema:
             return VerificationPlan(
                 action=action,
                 verifications=[
-                    VerificationSpec(
-                        predicate="url_changed", label="verify_navigation_succeeded"
-                    )
+                    VerificationSpec(predicate="url_changed", label="verify_navigation_succeeded")
                 ],
                 reasoning="Fallback: verify URL changed after navigation",
             )
@@ -324,9 +324,7 @@ Return ONLY valid JSON matching this schema:
             return VerificationPlan(
                 action=action,
                 verifications=[
-                    VerificationSpec(
-                        predicate="snapshot_changed", label="verify_click_effect"
-                    )
+                    VerificationSpec(predicate="snapshot_changed", label="verify_click_effect")
                 ],
                 reasoning="Fallback: verify page changed after click",
             )

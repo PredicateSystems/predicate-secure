@@ -13,7 +13,7 @@ Get the demo running in 5 minutes!
 ### 1. Install Dependencies
 
 ```bash
-cd /Users/guoliangwang/Code/Sentience/predicate-secure/py-predicate-secure
+cd /Users/PredicateDEV/Code/Sentience/predicate-secure/py-predicate-secure
 
 # Install the predicate-secure SDK
 pip install -e .
