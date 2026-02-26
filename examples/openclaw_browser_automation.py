@@ -99,7 +99,7 @@ def main():
     try:
         # Run the OpenClaw task with authorization
         result = secure_agent.run(task=task)
-        print(f"\n[OpenClaw] Task completed successfully")
+        print("\n[OpenClaw] Task completed successfully")
         print(f"Return code: {result.get('returncode', 'N/A')}")
         print(f"Output: {result.get('stdout', '')[:200]}...")
     except Exception as e:
@@ -124,6 +124,7 @@ def example_with_debug_mode():
     try:
         result = secure_agent.run(task=task)
         print("\n[Debug] Task trace complete")
+        print(f"Result: {result}")
     except Exception as e:
         print(f"\n[Debug] Error occurred: {e}")
 

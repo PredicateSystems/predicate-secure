@@ -4,7 +4,11 @@ import pytest
 
 from predicate_secure import SecureAgent
 from predicate_secure.detection import Framework, FrameworkDetector
-from predicate_secure.openclaw_adapter import OpenClawAdapter, OpenClawConfig, create_openclaw_adapter
+from predicate_secure.openclaw_adapter import (
+    OpenClawAdapter,
+    OpenClawConfig,
+    create_openclaw_adapter,
+)
 
 
 class TestOpenClawConfig:
@@ -60,6 +64,7 @@ class TestOpenClawDetection:
 
         class MockOpenClawWrapper:
             __module__ = "not_openclaw_module"  # Force module check to fail
+
             def __init__(self):
                 self.openclaw_process = None
                 self.openclaw_config = {}

@@ -13,9 +13,10 @@ import json
 import os
 import subprocess
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urlparse
 
 
@@ -121,7 +122,7 @@ class SkillProxyHandler(BaseHTTPRequestHandler):
             return f"element:{data['elementId']}"
         # For predicate-snapshot, resource is the current page
         if "url" in data:
-            return data["url"]
+            return str(data["url"])
         return "*"
 
     def _send_json_response(self, status: int, data: dict) -> None:
@@ -165,7 +166,9 @@ class OpenClawAdapter:
         self._authorizer = authorizer
         SkillProxyHandler.authorizer = self._wrap_authorizer(authorizer)
 
-    def _wrap_authorizer(self, authorizer: Callable[[str, dict], bool]) -> Callable[[str, dict], bool]:
+    def _wrap_authorizer(
+        self, authorizer: Callable[[str, dict], bool]
+    ) -> Callable[[str, dict], bool]:
         """Wrap authorizer to handle predicate-authority integration."""
 
         def wrapped(action: str, context: dict) -> bool:
