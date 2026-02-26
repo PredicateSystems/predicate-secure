@@ -11,9 +11,9 @@ import json
 import logging
 import os
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
-from transformers import AutoModelForCausalLM, AutoTokenizer  # type: ignore
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +64,8 @@ class LocalLLMVerifier:
         self.max_tokens = max_tokens
         self.temperature = temperature
 
-        self._model: Optional[Any] = None
-        self._tokenizer: Optional[Any] = None
+        self._model: Any | None = None
+        self._tokenizer: Any | None = None
         self._initialized = False
 
     def _lazy_init(self) -> None:
@@ -250,24 +250,24 @@ Return ONLY valid JSON matching this schema:
         ]
 
         # Apply chat template
-        text = self._tokenizer.apply_chat_template(  # type: ignore
+        text = self._tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
         )
 
         # Tokenize
-        inputs = self._tokenizer([text], return_tensors="pt").to(self._model.device)  # type: ignore
+        inputs = self._tokenizer([text], return_tensors="pt").to(self._model.device)
 
         # Generate
-        outputs = self._model.generate(  # type: ignore
+        outputs = self._model.generate(
             **inputs,
             max_new_tokens=self.max_tokens,
             temperature=self.temperature if self.temperature > 0 else None,
             do_sample=self.temperature > 0,
-            pad_token_id=self._tokenizer.eos_token_id,  # type: ignore
+            pad_token_id=self._tokenizer.eos_token_id,
         )
 
         # Decode
-        generated_text: str = self._tokenizer.decode(outputs[0], skip_special_tokens=True)  # type: ignore
+        generated_text: str = self._tokenizer.decode(outputs[0], skip_special_tokens=True)
 
         # Extract response (everything after the user prompt)
         # This handles the chat template format

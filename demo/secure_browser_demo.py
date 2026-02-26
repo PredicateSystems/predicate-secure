@@ -13,9 +13,9 @@ import logging
 import os
 import sys
 import uuid
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Callable
 
 from dotenv import load_dotenv
 from rich.console import Console
