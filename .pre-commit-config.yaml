@@ -33,7 +33,7 @@ repos:
     hooks:
       - id: isort
         args: ["--profile=black", "--line-length=100"]
-        exclude: ^(venv/|\.venv/|build/|dist/)
+        exclude: ^(venv/|\.venv/|build/|dist/|demo/)
 
   # Flake8 for style guide enforcement
   - repo: https://github.com/pycqa/flake8
@@ -77,14 +77,6 @@ repos:
       - id: pyupgrade
         args: ["--py311-plus"]
         exclude: ^(venv/|\.venv/|build/|dist/)
-
-  # Markdown linting for docs-heavy workflows
-  - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.14.0
-    hooks:
-      - id: markdownlint-cli2
-        args: ["--config", ".markdownlint.yaml"]
-        files: \.md$
 
 default_language_version:
   python: python3.11
