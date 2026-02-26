@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "predicate-secure"
-version = "0.1.0"
+version = "0.2.0"
 description = "Drop-in security wrapper for AI agents - adds authorization, verification, and audit to any agent framework"
 readme = "README.md"
 license = {text = "MIT OR Apache-2.0"}

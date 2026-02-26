@@ -46,7 +46,7 @@ from .tracing import (
     create_debug_tracer,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 # Public API
 __all__ = [
