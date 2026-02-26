@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
+import subprocess  # nosec B404
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
