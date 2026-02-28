@@ -5,6 +5,12 @@
 
 Drop-in security wrapper for AI agents. Adds authorization, verification, and audit to any agent framework in 3 lines of code.
 
+## 🛡️ Pre-Execution Authorization — Live in Your Terminal
+
+Watch every ALLOW/DENY decision as it happens. No guesswork. No post-mortems. Real-time control over what your agent can and cannot do.
+
+![TUI Dashboard](docs/assets/tui.gif)
+
 ## Features
 
 - **Pre-action authorization** - Policy engine gates every action before execution
